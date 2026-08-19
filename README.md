@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Telecom Churn Prediction & Production Monitoring
 
 An end-to-end churn prediction system built to mirror the responsibilities of an
@@ -94,6 +93,3 @@ production monitoring logic are complete and tested. Next: Snowflake
 integration for prediction/actuals reconciliation, and an n8n workflow for
 automated Slack/email alerting on the monitoring script's severity output.
 =======
-# Customer-Churn-Predictor
-This project rebuilds an earlier churn-prediction exercise into a complete, production-minded pipeline: model selection with proper validation discipline, a frozen deployment artifact, a simulated production timeline with injected data drift, and an automated monitoring/alerting system that distinguishes early warning signals from confirmed impact.
->>>>>>> e4c8cc96fc26ef0f9992c42ac7135a2bf4662c1c
