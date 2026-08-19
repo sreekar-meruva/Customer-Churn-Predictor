@@ -83,7 +83,7 @@ reports/          generated weekly monitoring output
 
 ## Tech stack
 
-Python, pandas, scikit-learn, XGBoost, Snowflake (planned), n8n (planned) for
+Python, pandas, scikit-learn, Linear Regression, Random Forest, XGBoost, Snowflake (planned), n8n (planned) for
 workflow automation and alerting.
 
 ## Status
