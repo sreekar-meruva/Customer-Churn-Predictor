@@ -1,0 +1,1 @@
+{"model": "RandomForestClassifier", "threshold": 0.25, "feature_columns": ["AccountWeeks", "ContractRenewal", "DataPlan", "DataUsage", "CustServCalls", "DayMins", "DayCalls", "MonthlyCharge", "OverageFee", "RoamMins"], "brier_baseline_stats": {"mean": 0.053790902123749644, "std": 0.02344703757109535}}
