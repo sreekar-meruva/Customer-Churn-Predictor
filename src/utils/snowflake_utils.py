@@ -1,6 +1,8 @@
 import os
 from snowflake.connector import connect
 from dotenv import load_dotenv
+import platform
+platform.libc_ver = lambda *args, **kwargs: ("", "")
 
 load_dotenv()
 
