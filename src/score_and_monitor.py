@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import datetime
 from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
+from src.utils.snowflake_writer import insert_dataframe
 from sklearn.metrics import brier_score_loss
 
 def  monitor_input_output(model, prod_stream, metadata):
@@ -60,6 +61,26 @@ def compute_baseline_brier(model, prod_stream,features):
         'std': np.std(brier_scores)
     }
 
+def write_performance_log(stats,metadata):
+    table_name = "PERFORMANCE_LOG"
+    report={
+        "week": stats['Week'],
+        'model_version': metadata['model'],
+        'batch_count': stats['Week_total_count'],
+        'f2_score': stats['Performance']['F2 Score'] if stats['Performance'] != None else None,
+        'precision_score': stats['Performance']['Precision'] if stats['Performance']!=None else None,
+        'recall_score': stats['Performance']['Recall'] if stats['Performance']!=None else None,
+        'brier_loss': stats['Performance']['Brier loss score'] if stats['Performance']!=None else None,
+        'brier_threshold': metadata['brier_baseline_stats']['mean']+(1.5*metadata['brier_baseline_stats']['std']),
+        'severity': stats['Severity'],
+        'computed_at': stats['Date scored'],
+        'coverage': stats['Week_performance_coverage'],
+        'not_na_count': stats['Week_not_null_count']
+    }
+    performance_report_df = pd.DataFrame([report])
+    print(insert_dataframe(performance_report_df,table_name))
+
+
 
 def main():
     model = joblib.load(r"artifacts\RandomForest.joblib")
@@ -75,13 +96,14 @@ def main():
 
     if "brier_baseline_stats" not in metadata.keys():
         metadata['brier_baseline_stats'] = compute_baseline_brier(model, prod_stream, metadata['feature_columns'])
-    
+
     report = monitor_input_output(model, prod_stream, metadata)
     with open("Weekly report.json",'w') as f:
         json.dump(report, f)
     with open(r"artifacts\model_metadata.json",'w') as f:
         json.dump(metadata,f)
 
+    write_performance_log(report,metadata)
     return report
 
 if __name__ == "__main__":
