@@ -12,5 +12,8 @@ TABLE performance_log (
     brier_threshold FLOAT,
     severity STRING,
     computed_at TIMESTAMP NOT NULL,
+    coverage FLOAT,
+    batch_count INT,
+    not_na_count INT,
     PRIMARY KEY (week, model_version)
 )

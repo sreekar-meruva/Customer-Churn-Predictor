@@ -26,6 +26,8 @@ def get_drift_scores(baseline_stats, prod_stream, features):
     return(drift_scores)
 
 def get_performance_metrics(model, threshold, batch, features):
+    if len(batch)==0:
+        return None
     true_values = batch['Churn']
     feature_data = batch[features]
     probs = model.predict_proba(feature_data)[:,1]
