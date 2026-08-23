@@ -1,16 +1,7 @@
-import joblib
-import json
 import pandas as pd
 import numpy as np
 from sklearn.metrics import fbeta_score, recall_score, precision_score, brier_score_loss
 from src.simulate_deployment import generate_weeks, inject_drift_check
-
-model = joblib.load("RandomForest.joblib")
-prod_df = pd.read_csv("production_pool.csv")
-generate_weeks(prod_df)
-train_pool = pd.read_csv("training_pool.csv")
-with open("model_metadata.json") as f:
-    metadata=json.load(f)
 
 #Get top 3 priority features
 def get_top_features(model, features):
@@ -19,8 +10,8 @@ def get_top_features(model, features):
     return top_features[:3]
 
 def get_drift_scores(baseline_stats, prod_stream, features):
-    base_means = baseline_stats.loc['mean']
-    base_stds = baseline_stats.loc['std']
+    base_means = pd.Series(baseline_stats['mean'])
+    base_stds = pd.Series(baseline_stats['std'])
     weekly_means = prod_stream.groupby('Week')[features].mean()
     drift_scores = (weekly_means-base_means)/base_stds
     return(drift_scores)

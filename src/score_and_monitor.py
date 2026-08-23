@@ -6,24 +6,22 @@ import datetime
 from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
 from sklearn.metrics import brier_score_loss
 
-def  monitor_input_output(model, train_pool, prod_stream, metadata):
+def  monitor_input_output(model, prod_stream, metadata):
     threshold = metadata['threshold']
     features = metadata['feature_columns']
     brier_baseline_stats = metadata['brier_baseline_stats']
     week = prod_stream['Week'].max()
     continuous_features = [col for col in features if prod_stream[col].nunique()>2]
+    baseline_stats = metadata['baseline_stats']
 
-    drift_baseline_stats = train_pool[continuous_features].agg(['mean','std'])
-    drift_scores = get_drift_scores(drift_baseline_stats, prod_stream[(prod_stream['Week']==week)], continuous_features)
-
-    performance_metrics = None
+    drift_scores = get_drift_scores(baseline_stats, prod_stream[(prod_stream['Week']==week)], continuous_features)
 
     batch = prod_stream.loc[(prod_stream['Week']==week)]
     initial_batch_count = len(batch)
     batch = batch.dropna(subset='Churn')
     current_batch_count = len(batch)
     coverage_percent = (current_batch_count/initial_batch_count)*100
-    performance_metrics = get_performance_metrics(model, threshold, batch, features)
+    performance_metrics = get_performance_metrics(model, threshold, batch, features) if coverage_percent>0 else None
 
     alert_status = alert_log(drift_scores, brier_baseline_stats, performance_metrics)
 
@@ -39,6 +37,15 @@ def  monitor_input_output(model, train_pool, prod_stream, metadata):
     }
 
     return report
+
+def compute_baseline_stats(train_pool, features):
+    baseline_stats = train_pool[features].agg(['mean','std'])
+    mean = baseline_stats.loc['mean']
+    std = baseline_stats.loc['std']
+    return {
+        'mean': mean.to_dict(),
+        'std': std.to_dict()
+    }
 
 def compute_baseline_brier(model, prod_stream,features):
     brier_scores=[]
@@ -61,14 +68,18 @@ def main():
         metadata=json.load(f)
 
     prod_stream = pd.read_csv(r"data\processed\Production_prepared_stream.csv")
-    if 'brier_baseline_stats' not in metadata.keys():
-        brier_baseline_stats = compute_baseline_brier(model, prod_stream, metadata['feature_columns'])
-        metadata['brier_baseline_stats'] = brier_baseline_stats
+
+    if "baseline_stats" not in metadata.keys():
+        continuous_features = [feature for feature in metadata['feature_columns'] if prod_stream[feature].nunique()>2]
+        metadata["baseline_stats"] = compute_baseline_stats(train_pool, continuous_features)
+
+    if "brier_baseline_stats" not in metadata.keys():
+        metadata['brier_baseline_stats'] = compute_baseline_brier(model, prod_stream, metadata['feature_columns'])
     
-    report = monitor_input_output(model, train_pool, prod_stream, metadata)
+    report = monitor_input_output(model, prod_stream, metadata)
     with open("Weekly report.json",'w') as f:
         json.dump(report, f)
-    with open("model_metadata.json",'w') as f:
+    with open(r"artifacts\model_metadata.json",'w') as f:
         json.dump(metadata,f)
 
     return report
