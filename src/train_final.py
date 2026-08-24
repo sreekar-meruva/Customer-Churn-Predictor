@@ -26,7 +26,7 @@ metadata = {
     "feature_columns": list(X.columns)
 }
 
-joblib.dump(model, "RandomForest.joblib")
+joblib.dump(model, r"artifacts\RandomForest.joblib")
 
-with open("model_metadata.json", 'w') as f:
+with open(r"artifacts\model_metadata.json", 'w') as f:
     json.dump(metadata, f)

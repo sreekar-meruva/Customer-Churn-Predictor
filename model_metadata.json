@@ -1,1 +1,0 @@
-{"model": "RandomForestClassifier", "threshold": 0.25, "feature_columns": ["AccountWeeks", "ContractRenewal", "DataPlan", "DataUsage", "CustServCalls", "DayMins", "DayCalls", "MonthlyCharge", "OverageFee", "RoamMins"]}
