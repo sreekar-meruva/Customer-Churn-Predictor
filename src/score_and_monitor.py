@@ -2,6 +2,7 @@ import json
 import joblib
 import pandas as pd
 import numpy as np
+import uuid
 import datetime
 from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
 from src.utils.snowflake_writer import insert_dataframe
@@ -80,6 +81,8 @@ def write_performance_log(stats,metadata):
     performance_report_df = pd.DataFrame([report])
     print(insert_dataframe(performance_report_df,table_name))
 
+def write_actuals():
+    return
 
 
 def main():

@@ -6,7 +6,7 @@ def generate_weeks(prod_df):
     date_time_offset = np.random.randint(low=0, high=182, size=len(prod_df))
     prod_df['Week'] = (date_time_offset//7)+1
     prod_df['Score_date'] = pd.to_datetime('2026-01-01')+pd.to_timedelta(date_time_offset, unit='D')
-    prod_df.to_csv("Production_prepared_stream.csv", index=False)
+    prod_df.to_csv(r"data\processed\Production_prepared_stream.csv", index=False)
 
 
 def inject_drift_check(prod_df, feature):
