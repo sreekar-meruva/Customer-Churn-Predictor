@@ -81,8 +81,11 @@ def write_performance_log(stats,metadata):
     performance_report_df = pd.DataFrame([report])
     print(insert_dataframe(performance_report_df,table_name))
 
-def write_actuals():
-    return
+def write_actuals(prod_df):
+    table_name = "ACTUALS"
+    actuals_df = prod_df[['Record_id','Churn','Score_date','Week']]
+    actuals_df = actuals_df.rename(columns={'Record_id':'record_id','Churn':'churn','Score_date':'known_date','Week':'week'})
+    print(insert_dataframe(actuals_df,table_name))
 
 
 def main():
@@ -107,6 +110,7 @@ def main():
         json.dump(metadata,f)
 
     write_performance_log(report,metadata)
+    write_actuals(prod_stream[(prod_stream['Week']==report['Week'])])
     return report
 
 if __name__ == "__main__":

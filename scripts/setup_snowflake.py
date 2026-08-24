@@ -19,10 +19,10 @@ def run_ddl():
     cursor.close()
     connection.close()
 
-def rewrite_actuals():
+def rewrite_performance_log():
     connection = get_snowflake_connection()
     cursor = connection.cursor()
-    filepath = r"sql\ddl\002_actuals.sql"
+    filepath = r"sql\ddl\004_performance_log.sql"
     with open(filepath) as f:
         sql_script = f.read()
     cursor.execute(sql_script)
@@ -31,4 +31,5 @@ def rewrite_actuals():
     connection.close()
 
 if __name__=="__main__":
-    run_ddl()
+    rewrite_performance_log()
+    # run_ddl()
