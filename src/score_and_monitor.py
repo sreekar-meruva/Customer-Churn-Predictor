@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import uuid
 import datetime
-from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
+from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log, get_model_predictions
 from src.utils.snowflake_writer import insert_dataframe
 from sklearn.metrics import brier_score_loss
 
@@ -19,11 +19,16 @@ def  monitor_input_output(model, prod_stream, metadata):
     drift_scores = get_drift_scores(baseline_stats, prod_stream[(prod_stream['Week']==week)], continuous_features)
 
     batch = prod_stream.loc[(prod_stream['Week']==week)]
+    pred_df = get_model_predictions(model, threshold, batch, features)
+
+    write_prediction_log(pred_df,week)
+
     initial_batch_count = len(batch)
     batch = batch.dropna(subset='Churn')
     current_batch_count = len(batch)
     coverage_percent = (current_batch_count/initial_batch_count)*100
-    performance_metrics = get_performance_metrics(model, threshold, batch, features) if coverage_percent>0 else None
+    pred_churn_df = pred_df.loc[(pred_df['record_id'].isin(batch['Record_id']))]
+    performance_metrics = get_performance_metrics(pred_churn_df, batch['Churn']) if coverage_percent>0 else None
 
     alert_status = alert_log(drift_scores, brier_baseline_stats, performance_metrics)
 
@@ -37,6 +42,8 @@ def  monitor_input_output(model, prod_stream, metadata):
         'Week_total_count': initial_batch_count,
         'Week_not_null_count': current_batch_count
     }
+
+    write_performance_log(report,metadata)
 
     return report
 
@@ -81,6 +88,16 @@ def write_performance_log(stats,metadata):
     performance_report_df = pd.DataFrame([report])
     print(insert_dataframe(performance_report_df,table_name))
 
+def write_prediction_log(df, week):
+    table_name = 'PREDICTIONS'
+    df = df.copy()
+    df['prediction_id'] = [str(uuid.uuid4()) for _ in range(len(df))]
+    df['week'] = week
+    df['score_date'] = datetime.date.today()
+    df['score_at'] = str(datetime.datetime.now())
+    df = df.rename(columns={'probabilities':'probability','predictions':'prediction'})
+    print(insert_dataframe(df, table_name))
+
 def write_actuals(prod_df):
     table_name = "ACTUALS"
     actuals_df = prod_df[['Record_id','Churn','Score_date','Week']]
@@ -109,7 +126,6 @@ def main():
     with open(r"artifacts\model_metadata.json",'w') as f:
         json.dump(metadata,f)
 
-    write_performance_log(report,metadata)
     write_actuals(prod_stream[(prod_stream['Week']==report['Week'])])
     return report
 

@@ -10,7 +10,7 @@ def insert_dataframe(df, table_name):
         INSERT_QUERY = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
         values = [tuple(row) for row in df.itertuples(index=False)]
         cursor.executemany(INSERT_QUERY, values)
-        return('Insert query run successfully completed!')
+        return(f'Insert query run successfully completed for {table_name}!')
     except Exception as e:
         raise Exception(f"Unable to insert the records to table due to {e}")
     finally:
