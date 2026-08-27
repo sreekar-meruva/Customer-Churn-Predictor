@@ -14,7 +14,10 @@ def get_drift_scores(baseline_stats, prod_stream, features):
     base_stds = pd.Series(baseline_stats['std'])
     weekly_means = prod_stream.groupby('Week')[features].mean()
     drift_scores = (weekly_means-base_means)/base_stds
-    return(drift_scores)
+    return {
+        'weekly_means': weekly_means,
+        'drift_scores': drift_scores
+    }
 
 def get_performance_metrics(df, true_values):
     return {

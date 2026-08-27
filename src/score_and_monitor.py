@@ -16,7 +16,7 @@ def  monitor_input_output(model, prod_stream, metadata):
     continuous_features = [col for col in features if prod_stream[col].nunique()>2]
     baseline_stats = metadata['baseline_stats']
 
-    drift_scores = get_drift_scores(baseline_stats, prod_stream[(prod_stream['Week']==week)], continuous_features)
+    get_drift = get_drift_scores(baseline_stats, prod_stream[(prod_stream['Week']==week)], continuous_features)
 
     batch = prod_stream.loc[(prod_stream['Week']==week)]
     pred_df = get_model_predictions(model, threshold, batch, features)
@@ -30,7 +30,9 @@ def  monitor_input_output(model, prod_stream, metadata):
     pred_churn_df = pred_df.loc[(pred_df['record_id'].isin(batch['Record_id']))]
     performance_metrics = get_performance_metrics(pred_churn_df, batch['Churn']) if coverage_percent>0 else None
 
-    alert_status = alert_log(drift_scores, brier_baseline_stats, performance_metrics)
+    write_drift_log(baseline_stats, continuous_features, get_drift['drift_scores'], get_drift['weekly_means'], week)
+
+    alert_status = alert_log(get_drift['drift_scores'], brier_baseline_stats, performance_metrics)
 
     report = {
         'Week': int(week),
@@ -104,6 +106,21 @@ def write_actuals(prod_df):
     actuals_df = actuals_df.rename(columns={'Record_id':'record_id','Churn':'churn','Score_date':'known_date','Week':'week'})
     print(insert_dataframe(actuals_df,table_name))
 
+def write_drift_log(baseline_stats, features, drift_scores, weekly_mean, week):
+    table_name = "DRIFT_LOG"
+    drift_df = pd.concat([weekly_mean,drift_scores]).reset_index(drop=True)
+    drift_df = drift_df.T.reset_index(drop=True)
+    drift_df.columns = ['week_mean','drift_score']
+    series_mean = pd.Series(baseline_stats['mean']).reset_index(drop=True)
+    series_std = pd.Series(baseline_stats['std']).reset_index(drop=True)
+    series_features = pd.Series(features)
+    drift_df['week'] = week
+    drift_df['feature'] = series_features
+    drift_df['base_mean'] = series_mean
+    drift_df['base_std'] = series_std
+    drift_df['computed_at'] = str(pd.Timestamp.now())    
+    
+    print(insert_dataframe(drift_df,table_name))
 
 def main():
     model = joblib.load(r"artifacts\RandomForest.joblib")
