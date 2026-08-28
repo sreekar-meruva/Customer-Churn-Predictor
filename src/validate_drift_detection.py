@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.metrics import fbeta_score, recall_score, precision_score, brier_score_loss
-from src.simulate_deployment import generate_weeks, inject_drift_check
+from src.simulate_deployment import inject_drift_check
 
 #Get top 3 priority features
 def get_top_features(model, features):
@@ -83,7 +83,7 @@ def model_performance_report(results):
     summary_df = pd.DataFrame(summary_report)
     return(summary_df)
 
-def alert_log(drift_scores, baseline_stats, performance):
+def alert_log(drift_scores, baseline_stats:dict, performance):
     max_drift = drift_scores.abs().to_numpy().max()
 
     if performance:
