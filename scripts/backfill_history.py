@@ -9,19 +9,23 @@ import datetime
 
 def backfill_performance(model, metadata):
     df = pd.read_csv(r"data\processed\Production_prepared_stream.csv")
+    connection = None
+    cursor = None
     try:
         connection = get_snowflake_connection()
         cursor = connection.cursor()
         UNIQUE_WEEKS_SCRIPT = f"SELECT DISTINCT WEEK FROM PERFORMANCE_LOG"
         cursor.execute(UNIQUE_WEEKS_SCRIPT)
-        db_weeks = cursor.fetchall()[0]
+        db_weeks = [week[0] for week in cursor.fetchall()]
         df_weeks = df['Week'].unique()
         features = metadata['feature_columns']
+        cont_features = [feature for feature in features if df[feature].nunique()>2]
         threshold = metadata['threshold']
         for week in df_weeks:
             if week in db_weeks:
                 continue
             df_data = df.loc[(df['Week']==week)]
+            drift_scores = get_drift_scores(baseline_stats=metadata['baseline_stats'],prod_stream=df_data, features=cont_features)
             pred_df = get_model_predictions(model, threshold, df_data, features)
             initial_count = len(pred_df)
             df_data = df_data.dropna(subset='Churn')
@@ -31,7 +35,6 @@ def backfill_performance(model, metadata):
             perf_metrics = get_performance_metrics(pred_churn_df, df_data['Churn']) if coverage>0 else None
 
             cont_features = [feature for feature in features if df[feature].nunique()>2]
-            drift_scores = get_drift_scores(baseline_stats=metadata['baseline_stats'],prod_stream=df, features=cont_features)
             alert_status = alert_log(drift_scores=drift_scores['drift_scores'],baseline_stats=metadata['brier_baseline_stats'],performance=perf_metrics)
 
             report = {
@@ -51,8 +54,8 @@ def backfill_performance(model, metadata):
         raise Exception(f"Unable to backfill to table PERFORMANCE_LOG due to {e}")
 
     finally:
-        cursor.close()
-        connection.close()
+        if cursor: cursor.close()
+        if connection: connection.close()
 
 if __name__=="__main__":
     with open(r"artifacts\model_metadata.json",'r') as f:

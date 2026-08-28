@@ -103,6 +103,7 @@ def write_prediction_log(df, week):
 def write_actuals(prod_df):
     table_name = "ACTUALS"
     actuals_df = prod_df[['Record_id','Churn','Score_date','Week']]
+    actuals_df = actuals_df.dropna(subset='Churn')
     actuals_df = actuals_df.rename(columns={'Record_id':'record_id','Churn':'churn','Score_date':'known_date','Week':'week'})
     print(insert_dataframe(actuals_df,table_name))
 
