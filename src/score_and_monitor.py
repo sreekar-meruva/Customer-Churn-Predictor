@@ -90,12 +90,19 @@ def write_performance_log(stats,metadata):
     performance_report_df = pd.DataFrame([report])
     print(insert_dataframe(performance_report_df,table_name))
 
-def write_prediction_log(df, week):
+def write_prediction_log(df, week, date = None):
     table_name = 'PREDICTIONS'
+    if date is None:
+        final_date = datetime.datetime.today()
+    elif isinstance(date,pd.Series):
+        final_date = date.fillna(pd.Timestamp.today().date())
+    else:
+        final_date = date
+    
     df = df.copy()
     df['prediction_id'] = [str(uuid.uuid4()) for _ in range(len(df))]
     df['week'] = week
-    df['score_date'] = datetime.date.today()
+    df['score_date'] = final_date
     df['score_at'] = str(datetime.datetime.now())
     df = df.rename(columns={'probabilities':'probability','predictions':'prediction'})
     print(insert_dataframe(df, table_name))

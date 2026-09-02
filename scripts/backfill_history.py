@@ -1,7 +1,7 @@
 import pandas as pd
 import json
 import joblib
-from src.score_and_monitor import write_performance_log, write_drift_log, write_actuals
+from src.score_and_monitor import write_performance_log, write_drift_log, write_actuals, write_prediction_log
 from src.score_and_monitor import get_performance_metrics
 from src.validate_drift_detection import get_model_predictions, alert_log, get_drift_scores
 from scripts.setup_snowflake import get_snowflake_connection
@@ -14,7 +14,7 @@ def backfill_logs(model, metadata):
     try:
         connection = get_snowflake_connection()
         cursor = connection.cursor()
-        UNIQUE_WEEKS_SCRIPT = f"SELECT DISTINCT WEEK FROM ACTUALS"
+        UNIQUE_WEEKS_SCRIPT = f"SELECT DISTINCT WEEK FROM PERFORMANCE_LOG"
         cursor.execute(UNIQUE_WEEKS_SCRIPT)
         db_weeks = [week[0] for week in cursor.fetchall()]
         df_weeks = df['Week'].unique()
@@ -24,13 +24,14 @@ def backfill_logs(model, metadata):
         for week in df_weeks:
             if week in db_weeks:
                 continue
-            df_data = df.loc[(df['Week']==week)]
+            df_data = df.loc[(df['Week']==week)].reset_index(drop=True)
             write_actuals(df_data)
 
             drift_scores = get_drift_scores(baseline_stats=metadata['baseline_stats'],prod_stream=df_data, features=cont_features)
             write_drift_log(metadata['baseline_stats'],features=cont_features,drift_scores=drift_scores['drift_scores'],weekly_mean=drift_scores['weekly_means'],week=week)
 
             pred_df = get_model_predictions(model, threshold, df_data, features)
+            write_prediction_log(df=pred_df, week=week, date=df_data['Score_date'])
             initial_count = len(pred_df)
             df_data = df_data.dropna(subset='Churn')
             current_count = len(df_data)
