@@ -111,7 +111,7 @@ RUNBOOK.md        operational reference: severity levels, known failure
 
 ## Tech stack
 
-Python, pandas, scikit-learn (Logistic Regression, Random Forest), XGBoost, SQL, Snowflake (key-pair authenticated), snowflake-connector-python.
+Python, pandas, scikit-learn, XGBoost, SQL, Snowflake (key-pair authenticated), snowflake-connector-python.
 
 ## Status and known limitations
 
