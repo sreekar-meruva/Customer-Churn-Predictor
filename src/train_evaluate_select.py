@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pprint
 
-df = pd.read_csv("telecom_churn.csv")
+df = pd.read_csv(r"data\raw\telecom_churn.csv")
 class_balance = df['Churn'].value_counts()
 
 X = df.drop(["Churn"],axis=1)
@@ -196,8 +196,11 @@ recall_precision = {
 }
 
 log_true, log_prob_pred = calibration_curve(np.array(y_actual), np.array(log_probs), n_bins=10)
+generate_calibration_graph(log_true, log_prob_pred, "Logisitic")
 rft_true, rft_prob_pred = calibration_curve(np.array(y_actual), np.array(rft_probs), n_bins=10)
+generate_calibration_graph(rft_true, rft_prob_pred, "Random Forest")
 xgb_true, xgb_prob_pred = calibration_curve(np.array(y_actual), np.array(xgb_probs),n_bins=10)
+generate_calibration_graph(xgb_true, xgb_prob_pred, "XG Boost")
 
 log_brier_loss = brier_score_loss(y_actual, log_probs)
 rft_brier_loss = brier_score_loss(y_actual, rft_probs)
