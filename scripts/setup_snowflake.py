@@ -1,5 +1,5 @@
 import glob
-from src.utils.snowflake_utils import get_snowflake_connection
+from api.utils.snowflake_utils import get_snowflake_connection
 
 def run_ddl():
     connection = get_snowflake_connection()

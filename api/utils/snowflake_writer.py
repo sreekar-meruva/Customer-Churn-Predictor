@@ -1,4 +1,4 @@
-from src.utils.snowflake_utils import get_snowflake_connection
+from api.utils.snowflake_utils import get_snowflake_connection
 import pandas as pd
 
 def insert_dataframe(df, table_name):
