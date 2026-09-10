@@ -14,9 +14,9 @@ def upload_to_snowflake(dataframe, table):
         'table': table
     }
     response = requests.post(url = URL, json=payload)
-    if response.status_code==200:
-        return response.text
-    return "[ERROR] Encountered error while uploading"
+    if response.status_code!=200:
+        raise RuntimeError(f"Snowflake insert failed for table {table}: {response.text}")
+    return response.text
 
 def write_performance_log(stats,metadata):
     table_name = "PERFORMANCE_LOG"
@@ -35,8 +35,8 @@ def write_performance_log(stats,metadata):
         'not_na_count': stats['Week_not_null_count']
     }
     performance_df = pd.DataFrame([report])
-    response = upload_to_snowflake(performance_df, table_name)
-    print(response)
+    upload_to_snowflake(performance_df, table_name)
+    
 
 def write_prediction_log(df, week, date = None):
     table_name = 'PREDICTIONS'

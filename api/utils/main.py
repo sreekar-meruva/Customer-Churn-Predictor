@@ -18,7 +18,6 @@ def insertToSnowflake(payload: InsertionRequest):
         dataframe = pd.DataFrame(payload.data)
         insert_dataframe(dataframe, table_name)
         return {
-            'status': status.HTTP_200_OK,
             'detail': f"Data uploaded to {table_name} successfully!"
         }
     except Exception as ex:
