@@ -5,7 +5,7 @@ import numpy as np
 import uuid
 import datetime
 from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log, get_model_predictions
-from src.utils.snowflake_writer import insert_dataframe
+from src.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
 from sklearn.metrics import brier_score_loss
 
 def  monitor_input_output(model, prod_stream, metadata):
@@ -70,65 +70,6 @@ def compute_baseline_brier(model, prod_stream,features):
         'mean': np.mean(brier_scores),
         'std': np.std(brier_scores)
     }
-
-def write_performance_log(stats,metadata):
-    table_name = "PERFORMANCE_LOG"
-    report={
-        "week": stats['Week'],
-        'model_version': metadata['model'],
-        'batch_count': stats['Week_total_count'],
-        'f2_score': stats['Performance']['F2 Score'] if stats['Performance'] != None else None,
-        'precision_score': stats['Performance']['Precision'] if stats['Performance']!=None else None,
-        'recall_score': stats['Performance']['Recall'] if stats['Performance']!=None else None,
-        'brier_loss': stats['Performance']['Brier loss score'] if stats['Performance']!=None else None,
-        'brier_threshold': metadata['brier_baseline_stats']['mean']+(1.5*metadata['brier_baseline_stats']['std']),
-        'severity': stats['Severity'],
-        'computed_at': stats['Date scored'],
-        'coverage': stats['Week_performance_coverage'],
-        'not_na_count': stats['Week_not_null_count']
-    }
-    performance_report_df = pd.DataFrame([report])
-    print(insert_dataframe(performance_report_df,table_name))
-
-def write_prediction_log(df, week, date = None):
-    table_name = 'PREDICTIONS'
-    if date is None:
-        final_date = datetime.datetime.today()
-    elif isinstance(date,pd.Series):
-        final_date = date.fillna(pd.Timestamp.today().date())
-    else:
-        final_date = date
-    
-    df = df.copy()
-    df['prediction_id'] = [str(uuid.uuid4()) for _ in range(len(df))]
-    df['week'] = week
-    df['score_date'] = final_date
-    df['score_at'] = str(datetime.datetime.now())
-    df = df.rename(columns={'probabilities':'probability','predictions':'prediction'})
-    print(insert_dataframe(df, table_name))
-
-def write_actuals(prod_df):
-    table_name = "ACTUALS"
-    actuals_df = prod_df[['Record_id','Churn','Score_date','Week']]
-    actuals_df = actuals_df.dropna(subset='Churn')
-    actuals_df = actuals_df.rename(columns={'Record_id':'record_id','Churn':'churn','Score_date':'known_date','Week':'week'})
-    print(insert_dataframe(actuals_df,table_name))
-
-def write_drift_log(baseline_stats, features, drift_scores, weekly_mean, week):
-    table_name = "DRIFT_LOG"
-    drift_df = pd.concat([weekly_mean,drift_scores]).reset_index(drop=True)
-    drift_df = drift_df.T.reset_index(drop=True)
-    drift_df.columns = ['week_mean','drift_score']
-    series_mean = pd.Series(baseline_stats['mean']).reset_index(drop=True)
-    series_std = pd.Series(baseline_stats['std']).reset_index(drop=True)
-    series_features = pd.Series(features)
-    drift_df['week'] = week
-    drift_df['feature'] = series_features
-    drift_df['base_mean'] = series_mean
-    drift_df['base_std'] = series_std
-    drift_df['computed_at'] = str(pd.Timestamp.now())    
-    
-    print(insert_dataframe(drift_df,table_name))
 
 def main():
     model = joblib.load(r"artifacts\RandomForest.joblib")
