@@ -1,5 +1,4 @@
 import pandas as pd
-from api.utils.snowflake_writer import insert_dataframe
 import datetime
 import uuid
 import requests
@@ -7,7 +6,7 @@ import requests
 BASE_URL = 'http://127.0.0.1:8000'
 
 def upload_to_snowflake(dataframe, table):
-    URL = BASE_URL+"/datainsertion/snowflake"
+    URL = BASE_URL+"/churn_predictor/upload_data"
     data_dict = dataframe.to_dict(orient='records')
     payload = {
         'data': data_dict,
@@ -35,7 +34,8 @@ def write_performance_log(stats,metadata):
         'not_na_count': stats['Week_not_null_count']
     }
     performance_df = pd.DataFrame([report])
-    upload_to_snowflake(performance_df, table_name)
+    response = upload_to_snowflake(performance_df, table_name)
+    print(response)
     
 
 def write_prediction_log(df, week, date = None):

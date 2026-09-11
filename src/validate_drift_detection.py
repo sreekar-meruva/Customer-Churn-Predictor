@@ -21,10 +21,10 @@ def get_drift_scores(baseline_stats, prod_stream, features):
 
 def get_performance_metrics(df, true_values):
     return {
-        'F2 Score': fbeta_score(true_values, df['predictions'], beta=2),
-        'Recall': recall_score(true_values, df['predictions']),
-        'Precision': precision_score(true_values, df['predictions']),
-        'Brier loss score': brier_score_loss(true_values, df['probabilities'])
+        'F2 Score': fbeta_score(true_values, df['Prediction'], beta=2),
+        'Recall': recall_score(true_values, df['Prediction']),
+        'Precision': precision_score(true_values, df['Prediction']),
+        'Brier loss score': brier_score_loss(true_values, df['Probability'])
     }
 
 def get_model_predictions(model, threshold, batch, features):

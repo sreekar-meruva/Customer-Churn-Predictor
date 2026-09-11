@@ -2,14 +2,13 @@ import json
 import joblib
 import pandas as pd
 import numpy as np
-import uuid
+import requests
 import datetime
 from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log, get_model_predictions
 from src.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
 from sklearn.metrics import brier_score_loss
 
 def  monitor_input_output(model, prod_stream, metadata):
-    threshold = metadata['threshold']
     features = metadata['feature_columns']
     brier_baseline_stats = metadata['brier_baseline_stats']
     week = prod_stream['Week'].max()
@@ -19,7 +18,7 @@ def  monitor_input_output(model, prod_stream, metadata):
     get_drift = get_drift_scores(baseline_stats, prod_stream[(prod_stream['Week']==week)], continuous_features)
 
     batch = prod_stream.loc[(prod_stream['Week']==week)]
-    pred_df = get_model_predictions(model, threshold, batch, features)
+    pred_df = get_predictions(batch, metadata)
 
     write_prediction_log(pred_df,week)
 
@@ -27,7 +26,7 @@ def  monitor_input_output(model, prod_stream, metadata):
     batch = batch.dropna(subset='Churn')
     current_batch_count = len(batch)
     coverage_percent = (current_batch_count/initial_batch_count)*100
-    pred_churn_df = pred_df.loc[(pred_df['record_id'].isin(batch['Record_id']))]
+    pred_churn_df = pred_df.loc[(pred_df['Record_id'].isin(batch['Record_id']))]
     performance_metrics = get_performance_metrics(pred_churn_df, batch['Churn']) if coverage_percent>0 else None
 
     write_drift_log(baseline_stats, continuous_features, get_drift['drift_scores'], get_drift['weekly_means'], week)
@@ -70,6 +69,20 @@ def compute_baseline_brier(model, prod_stream,features):
         'mean': np.mean(brier_scores),
         'std': np.std(brier_scores)
     }
+
+def get_predictions(batch: pd.DataFrame, metadata: json):
+    BASE_URL = "http://127.0.0.1:8000"
+    URL = BASE_URL+"/churn_predictor/predict"
+    features = ['Record_id']+metadata['feature_columns']
+    batch = batch[features]
+    batch_dict = batch.to_dict(orient="records")
+    payload = {
+        'batch': batch_dict
+    }
+    response = requests.post(url = URL, json=payload)
+    response_df = pd.DataFrame(response.json())
+    return(response_df)
+
 
 def main():
     model = joblib.load(r"artifacts\RandomForest.joblib")
