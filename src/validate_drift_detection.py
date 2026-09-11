@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from sklearn.metrics import fbeta_score, recall_score, precision_score, brier_score_loss
 from src.simulate_deployment import inject_drift_check
 
@@ -27,18 +26,6 @@ def get_performance_metrics(df, true_values):
         'Brier loss score': brier_score_loss(true_values, df['Probability'])
     }
 
-def get_model_predictions(model, threshold, batch, features):
-    feature_data = batch[features]
-    probabilities = model.predict_proba(feature_data)[:,1]
-    predictions = (probabilities>=threshold).astype(int)
-    pred_dict = {
-        'record_id': batch['Record_id'],
-        'probabilities': probabilities,
-        'threshold': threshold,
-        'predictions': predictions
-    }
-    pred_df = pd.DataFrame(pred_dict)
-    return(pred_df)
 
 def monitor_drift_performance(model, train_pool, prod_stream, metadata):
     features = metadata['feature_columns']
