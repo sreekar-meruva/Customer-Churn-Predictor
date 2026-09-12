@@ -46,7 +46,23 @@ def  monitor_input_output(model, prod_stream, metadata):
 
     write_performance_log(report,metadata)
 
+    if alert_status.contains("[CRITICAL]"):
+        check_retrain_requirement(metadata['model'], week, 4)
+
     return report
+
+def check_retrain_requirement(model_version, week, range):
+    BASE_URL = "127.0.0.1:8000"
+    URL = BASE_URL+"/churn_predictor/check_severity"
+    payload = {
+        'model_version': model_version,
+        'week': week,
+        'range': range
+    }
+    response = requests.post(URL, json=payload)
+    response = response.json()
+    if response.Retrain_alert:
+        print("Trigger retrain.")
 
 def compute_baseline_stats(train_pool, features):
     baseline_stats = train_pool[features].agg(['mean','std'])
