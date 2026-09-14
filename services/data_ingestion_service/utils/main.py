@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, status
 from contextlib import asynccontextmanager
-from api.utils.snowflake_writer import insert_dataframe
-from api.utils.snowflake_reader import get_weeks_severity
+from services.data_ingestion_service.utils.snowflake_writer import insert_dataframe
+from services.data_ingestion_service.utils.snowflake_reader import get_weeks_severity
 from typing import List, Dict, Any
 import pandas as pd
 import joblib
