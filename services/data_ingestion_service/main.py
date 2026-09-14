@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, status
 from services.data_ingestion_service.utils.snowflake_writer import insert_dataframe
-from services.data_ingestion_service.utils.snowflake_reader import get_weeks_severity
-from typing import List, Dict, Any
+from services.data_ingestion_service.utils.snowflake_reader import get_weeks_severity, get_max_db_week
+from typing import List, Dict, Any, Optional
 import pandas as pd
 from pydantic import BaseModel
 
@@ -28,17 +28,13 @@ def insertToSnowflake(payload: InsertionRequest):
     except Exception as ex:
         raise HTTPException(status_code=status.HTTP_417_EXPECTATION_FAILED, detail=f"Unable to upload data to table due to {ex}")
 
-@app.post("/churn_predictor/check_severity")
-def checkSeverity(payload: SeverityValidationRequest):
+@app.get("/churn_predictor/get_severity")
+def checkSeverity(model_version: str, week: Optional[int]=None, range: Optional[int]=4):
     try:
-        records = get_weeks_severity(payload.model_version, payload.week, payload.range)
-        check=True
-        for record in records:
-            if not record['Severity'].contains("[CRITICAL]"):
-                check=False
-                break
-        return {
-            "Retrain_alert": check 
-        }
+        if week is None:
+            week = get_max_db_week(model_version).get('Week')
+
+        return get_weeks_severity(model_version, week, range)
+        
     except Exception as ex:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unable to validate severity due to {ex}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unable to fetch severity results due to {ex}")

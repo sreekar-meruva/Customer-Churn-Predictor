@@ -46,7 +46,7 @@ def monitor_drift_performance(model, train_pool, prod_stream, metadata):
         feature_metrics[feature]['drift_scores'] = drift_scores
         performance_records = []
         for week, week_batch in experiment_stream.groupby('Week'):
-            metrics = get_performance_metrics(model, threshold, week_batch, features)
+            metrics = get_performance_metrics(week_batch)
             metrics['Week']=week
             performance_records.append(metrics)
 

@@ -1,4 +1,4 @@
-from api.utils.snowflake_utils import get_snowflake_connection
+from services.data_ingestion_service.utils.snowflake_utils import get_snowflake_connection
 
 def insert_dataframe(df, table_name):
     conn = get_snowflake_connection()

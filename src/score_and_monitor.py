@@ -3,6 +3,7 @@ import joblib
 import pandas as pd
 import numpy as np
 import requests
+from typing import Optional
 import datetime
 from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log, get_model_predictions
 from src.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
@@ -47,23 +48,26 @@ def  monitor_input_output(model, prod_stream, metadata):
     write_performance_log(report,metadata)
 
     if "[CRITICAL]" in alert_status:
-        check_retrain_requirement(metadata['model'], int(week), 4)
+        if check_retrain_requirement(metadata['model']):
+            print("Retrain_required")
 
     write_actuals(prod_stream[(prod_stream['Week']==report['Week'])])
     return report
 
-def check_retrain_requirement(model_version, week, range):
+def check_retrain_requirement(model_version, week: Optional[int]=None, range: Optional[int]=4):
     BASE_URL = "http://127.0.0.1:8000"
-    URL = BASE_URL+"/churn_predictor/check_severity"
+    URL = BASE_URL+"/churn_predictor/get_severity"
     payload = {
         'model_version': model_version,
         'week': week,
         'range': range
     }
     response = requests.post(URL, json=payload)
+    response.raise_for_status()
     response = response.json()
-    if response['Retrain_alert']:
-        print("Trigger retrain.")
+    if len(response) < range:
+        return False
+    return all('CRITICAL' in record['Severity'] for record in response)
 
 def compute_baseline_stats(train_pool, features):
     baseline_stats = train_pool[features].agg(['mean','std'])
