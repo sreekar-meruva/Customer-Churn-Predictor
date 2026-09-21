@@ -62,7 +62,7 @@ def check_retrain_requirement(model_version, week: Optional[int]=None, range: Op
         'week': week,
         'range': range
     }
-    response = requests.post(URL, json=payload)
+    response = requests.get(URL, params=payload)
     response.raise_for_status()
     response = response.json()
     if len(response) < range:

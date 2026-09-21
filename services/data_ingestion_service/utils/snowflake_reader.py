@@ -34,3 +34,35 @@ def get_max_db_week(model_version):
     finally:
         cursor.close()
         conn.close()
+
+def get_data(table, columns, filters, limit):
+    conn = get_snowflake_connection()
+    cursor = conn.cursor()
+    try:
+        cols = ','.join(columns)
+        query = f"""SELECT {cols} FROM {table}"""
+        values = []
+        conditions = []
+        if filters:
+            for key, value in filters.items():
+                if isinstance(value, list):
+                    placeholders = ','.join(["%s"]*len(value))
+                    conditions.append(f"{key} IN ({placeholders})")
+                    values.extend(value)
+                else:
+                    conditions.append(f"{key} = %s")
+                    values.append(value)
+            query += " WHERE "+" AND ".join(conditions)
+        if limit:
+            query+='LIMIT %s'
+            values.append(limit)
+        cursor.execute(query, values)
+        records = cursor.fetchall()
+        return{
+            'records': records
+        }
+    except Exception as ex:
+        raise Exception(f"Unable to fetch records due to {ex}")
+    finally:
+        cursor.close()
+        conn.close()

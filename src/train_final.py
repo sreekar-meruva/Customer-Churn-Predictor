@@ -22,7 +22,8 @@ model.fit(X,y)
 metadata = {
     "model": "RandomForestClassifier",
     "threshold": 0.25,
-    "feature_columns": list(X.columns)
+    "feature_columns": list(X.columns),
+    "model_deployment_week": 1
 }
 
 joblib.dump(model, r"artifacts\RandomForest.joblib")

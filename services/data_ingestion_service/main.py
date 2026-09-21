@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Query
 from services.data_ingestion_service.utils.snowflake_writer import insert_dataframe
-from services.data_ingestion_service.utils.snowflake_reader import get_weeks_severity, get_max_db_week
+from services.data_ingestion_service.utils.snowflake_reader import get_weeks_severity, get_max_db_week, get_data
 from typing import List, Dict, Any, Optional
 import pandas as pd
 from pydantic import BaseModel
@@ -15,6 +15,12 @@ class SeverityValidationRequest(BaseModel):
     model_version: str
     week: int
     range: int
+
+class DataSearchRequest(BaseModel):
+    table_name: str
+    columns: Optional[List[str]] = ['*']
+    filters: Optional[Dict[str,List[Any]]] = None
+    limit: Optional[int] = None
 
 @app.post("/churn_predictor/upload_data")
 def insertToSnowflake(payload: InsertionRequest):
@@ -38,3 +44,14 @@ def checkSeverity(model_version: str, week: Optional[int]=None, range: Optional[
         
     except Exception as ex:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unable to fetch severity results due to {ex}")
+
+@app.post("/churn_predictor/get_data")
+def get_records(payload: DataSearchRequest):
+    try:
+        records = get_data(payload.table_name, payload.columns, payload.filters, payload.limit)
+        if records:
+            return records
+        return None
+    except Exception as ex:
+        print(ex)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unable to fetch the records due to {ex}")
