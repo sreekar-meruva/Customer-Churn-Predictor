@@ -9,6 +9,8 @@ from src.validate_drift_detection import get_drift_scores, get_performance_metri
 from src.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
 from sklearn.metrics import brier_score_loss
 
+BASE_URL = "http://127.0.0.1:8000/churn_predictor"
+
 def  monitor_input_output(model, prod_stream, metadata):
     features = metadata['feature_columns']
     brier_baseline_stats = metadata['brier_baseline_stats']
@@ -49,14 +51,23 @@ def  monitor_input_output(model, prod_stream, metadata):
 
     if "[CRITICAL]" in alert_status:
         if check_retrain_requirement(metadata['model']):
-            print("Retrain_required")
+            trigger_model_retrain(week)
 
     write_actuals(prod_stream[(prod_stream['Week']==report['Week'])])
     return report
 
-def check_retrain_requirement(model_version, week: Optional[int]=None, range: Optional[int]=4):
-    BASE_URL = "http://127.0.0.1:8000"
-    URL = BASE_URL+"/churn_predictor/get_severity"
+def trigger_model_retrain(drift_week: int, severity_range: Optional[int]=18):
+    URL = BASE_URL+'/retrain_model'
+    payload = {
+        'drift_week': drift_week,
+        'range': severity_range
+    }
+    response = requests.post(URL, json=payload)
+    detail = response.json()['detail']
+    print(detail)
+
+def check_retrain_requirement(model_version, week: Optional[int]=None, range: Optional[int]=6):
+    URL = BASE_URL+"/get_severity"
     payload = {
         'model_version': model_version,
         'week': week,
@@ -92,8 +103,7 @@ def compute_baseline_brier(model, prod_stream,features):
     }
 
 def get_predictions(batch: pd.DataFrame, metadata: json):
-    BASE_URL = "http://127.0.0.1:8000"
-    URL = BASE_URL+"/churn_predictor/predict"
+    URL = BASE_URL+"/predict"
     features = ['Record_id']+metadata['feature_columns']
     batch = batch[features]
     batch_dict = batch.to_dict(orient="records")
