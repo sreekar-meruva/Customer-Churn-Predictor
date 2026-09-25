@@ -5,7 +5,7 @@ import numpy as np
 import requests
 from typing import Optional
 import datetime
-from src.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log, get_model_predictions
+from services.monitoring_service.scripts.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
 from src.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
 from sklearn.metrics import brier_score_loss
 
@@ -115,13 +115,13 @@ def get_predictions(batch: pd.DataFrame, metadata: json):
     return(response_df)
 
 
-def main():
+def start_monitor(prod_stream: pd.DataFrame):
     model = joblib.load(r"artifacts\RandomForest.joblib")
     train_pool = pd.read_csv(r"data\processed\training_pool.csv")
     with open(r"artifacts\model_metadata.json") as f:
         metadata=json.load(f)
 
-    prod_stream = pd.read_csv(r"data\processed\Production_prepared_stream.csv")
+    prod_stream = pd.read_csv(r"data\processed\Production_prepared_stream.csv") if prod_stream is None else prod_stream
 
     if "baseline_stats" not in metadata.keys():
         continuous_features = [feature for feature in metadata['feature_columns'] if prod_stream[feature].nunique()>2]
@@ -140,4 +140,4 @@ def main():
     return report
 
 if __name__ == "__main__":
-    main()
+    start_monitor()

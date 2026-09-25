@@ -79,9 +79,9 @@ def evaluate_and_select(candidate_model: Any, test_data: pd.DataFrame):
     if f2_improvement and recall_check and brier_check:
         print('Replace model')
     elif f2_improvement and not recall_check:
-         print("Review models closely")
+        print("Review models closely")
     else:
-         print("Review models")
+        print("Review models")
 
 def model_train(drift_week:int, range: int):
     features = metadata['feature_columns']
