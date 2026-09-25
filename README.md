@@ -70,6 +70,14 @@ queries that connect model behavior back to real outcomes.
    against resolved actuals to validate model behavior directly from the
    warehouse.
 
+## Workflow
+
+![alt text](docs\workflow.svg)
+
+## Architecture
+
+![alt text](docs\architecture.svg)
+
 ## Key findings
 
 - Random Forest outperformed Logistic Regression and XGBoost on F2 score,
