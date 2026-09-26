@@ -1,8 +1,8 @@
 import pandas as pd
 import json
 import joblib
-from src.write_logs import write_performance_log, write_drift_log, write_actuals, write_prediction_log
-from src.validate_drift_detection import get_performance_metrics, get_model_predictions, alert_log, get_drift_scores
+from services.monitoring_service.utils.write_logs import write_performance_log, write_drift_log, write_actuals, write_prediction_log
+from services.monitoring_service.scripts.validate_drift_detection import get_performance_metrics, get_model_predictions, alert_log, get_drift_scores
 from services.data_ingestion_service.scripts.setup_snowflake import get_snowflake_connection
 import datetime
 

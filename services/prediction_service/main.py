@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import List
 from fastapi import FastAPI, HTTPException, status
+import pandas as pd
 from contextlib import asynccontextmanager
 import joblib
 import json

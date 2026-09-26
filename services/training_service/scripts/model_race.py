@@ -12,6 +12,8 @@ BASE_URL = "http://127.0.0.1:8000/churn_predictor"
 with open(r"services\prediction_service\artifacts\model_metadata.json") as f:
         metadata = json.load(f)
 
+MODEL_PATH = r"services\prediction_service\artifacts\RandomForest.joblib"
+
 def data_acquisition(features: List[str]):
     URL = BASE_URL+"/get_data"
     features.extend(['Week','Record_id'])
@@ -61,10 +63,16 @@ def get_metrics(model: Any, X_data: pd.DataFrame, y_true: pd.Series, threshold: 
           'recall_score': recall,
           'brier_loss': brier_loss
      }
+
+def trigger_monitor():
+    URL = BASE_URL+"/monitor"
+    response = requests.post(URL)
+    if response.status_code:
+        print("Monitor triggered successfully!")
      
 
-def evaluate_and_select(candidate_model: Any, test_data: pd.DataFrame):
-    champion_model = joblib.load(r"services\prediction_service\artifacts\RandomForest.joblib")
+def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_data: pd.DataFrame):
+    champion_model = joblib.load(MODEL_PATH)
     champion_threshold = metadata['threshold']
     candidate_threshold = get_optimal_threshold(candidate_model, test_data)
     y_true = test_data['Churn']
@@ -77,7 +85,19 @@ def evaluate_and_select(candidate_model: Any, test_data: pd.DataFrame):
     brier_check = candidate_metrics['brier_loss']<=(champion_metrics['brier_loss']+1.1)
 
     if f2_improvement and recall_check and brier_check:
-        print('Replace model')
+        joblib.dump(candidate_model, MODEL_PATH)
+        train_data.to_csv(r"data\processed\training_pool.csv")
+        model = metadata['model']
+        model_version = 1 if model=='RandomForestClassifer' else int(model.strip('RandomForestClassifer_v'))
+        metadata = {
+            'model': "RandomForestClassifer_v"+str(model_version+1),
+            'threshold': candidate_threshold,
+            'feature_columns': metadata['feature_columns'],
+            'model_deployment_week': np.max(test_data['Week'])
+        }
+        with open(r"services\prediction_service\artifacts\model_metadata.json",'w') as f:
+            json.dump(metadata,f)
+        trigger_monitor()
     elif f2_improvement and not recall_check:
         print("Review models closely")
     else:
@@ -108,7 +128,7 @@ def model_train(drift_week:int, range: int):
     y_train = train_data['Churn']
     candidate_model = RandomForestClassifier()
     candidate_model.fit(X_train, y_train, sample_weight=weights)
-    evaluate_and_select(candidate_model, test_data)
+    evaluate_and_select(candidate_model, train_data, test_data)
 
 if __name__=='__main__':
     data_acquisition()

@@ -1,6 +1,6 @@
 import pandas as pd
 from sklearn.metrics import fbeta_score, recall_score, precision_score, brier_score_loss
-from src.simulate_deployment import inject_drift_check
+from services.monitoring_service.utils.simulate_deployment import inject_drift_check
 
 #Get top 3 priority features
 def get_top_features(model, features):

@@ -6,7 +6,7 @@ import requests
 from typing import Optional
 import datetime
 from services.monitoring_service.scripts.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
-from src.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
+from services.monitoring_service.utils.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
 from sklearn.metrics import brier_score_loss
 
 BASE_URL = "http://127.0.0.1:8000/churn_predictor"
@@ -115,13 +115,13 @@ def get_predictions(batch: pd.DataFrame, metadata: json):
     return(response_df)
 
 
-def start_monitor(prod_stream: pd.DataFrame):
-    model = joblib.load(r"artifacts\RandomForest.joblib")
+def start_monitor():
+    model = joblib.load(r"services\prediction_service\artifacts\RandomForest.joblib")
     train_pool = pd.read_csv(r"data\processed\training_pool.csv")
-    with open(r"artifacts\model_metadata.json") as f:
+    with open(r"services\prediction_service\artifacts\model_metadata.json") as f:
         metadata=json.load(f)
 
-    prod_stream = pd.read_csv(r"data\processed\Production_prepared_stream.csv") if prod_stream is None else prod_stream
+    prod_stream = pd.read_csv(r"data\processed\Production_prepared_stream.csv")
 
     if "baseline_stats" not in metadata.keys():
         continuous_features = [feature for feature in metadata['feature_columns'] if prod_stream[feature].nunique()>2]
@@ -131,7 +131,7 @@ def start_monitor(prod_stream: pd.DataFrame):
         metadata['brier_baseline_stats'] = compute_baseline_brier(model, prod_stream, metadata['feature_columns'])
 
     report = monitor_input_output(model, prod_stream, metadata)
-    with open("Weekly report.json",'w') as f:
+    with open(r"services\monitoring_service\reports\Weekly report.json",'w') as f:
         json.dump(report, f)
     with open(r"artifacts\model_metadata.json",'w') as f:
         json.dump(metadata,f)

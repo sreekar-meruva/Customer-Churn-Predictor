@@ -1,4 +1,4 @@
-from src.simulate_deployment import inject_drift_check
+from services.monitoring_service.utils.simulate_deployment import inject_drift_check
 import pandas as pd
 
 prod_stream = pd.read_csv("Production_prepared_stream.csv")
