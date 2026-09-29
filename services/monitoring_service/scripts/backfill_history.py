@@ -4,21 +4,27 @@ import pandas as pd
 import json
 import joblib
 from services.monitoring_service.utils.write_logs import write_performance_log, write_drift_log, write_actuals, write_prediction_log
-from services.monitoring_service.scripts.score_and_monitor import get_predictions
+from services.monitoring_service.scripts.score_and_monitor import get_predictions,get_data
 from services.monitoring_service.scripts.validate_drift_detection import get_performance_metrics, alert_log, get_drift_scores
-from services.data_ingestion_service.scripts.setup_snowflake import get_snowflake_connection
 import datetime
 
+
+def get_unique_weeks(table_name:str):
+    DATA_INGESTION_URL = os.environ.get("DATA_INGESTION_SERVICE_URL","http://127.0.0.1:8002")
+    URL = DATA_INGESTION_URL+"/churn_predictor/get_data"
+    payload = {
+        "table_name": table_name,
+        "columns": ['Week']
+    }
+    response = requests.post(url = URL, json=payload)
+    records = response.json()['records']
+    df = pd.DataFrame(data=records, columns=['Week'])
+    return df['Week'].unique()
+
 def backfill_logs(metadata):
-    df = pd.read_csv(r"data\processed\Production_prepared_stream.csv")
-    connection = None
-    cursor = None
     try:
-        connection = get_snowflake_connection()
-        cursor = connection.cursor()
-        UNIQUE_WEEKS_SCRIPT = f"SELECT DISTINCT WEEK FROM PERFORMANCE_LOG"
-        cursor.execute(UNIQUE_WEEKS_SCRIPT)
-        db_weeks = [week[0] for week in cursor.fetchall()]
+        db_weeks = get_unique_weeks(table_name="PERFORMANCE_LOG")
+        df = get_data()
         df_weeks = df['Week'].unique()
         features = metadata['feature_columns']
         cont_features = [feature for feature in features if df[feature].nunique()>2]
@@ -58,10 +64,6 @@ def backfill_logs(metadata):
 
     except Exception as e:
         raise Exception(f"Unable to backfill to table PERFORMANCE_LOG due to {e}")
-
-    finally:
-        if cursor: cursor.close()
-        if connection: connection.close()
 
 if __name__=="__main__":
     PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL")

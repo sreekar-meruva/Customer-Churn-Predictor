@@ -12,7 +12,6 @@ from sklearn.model_selection import StratifiedKFold
 
 DATA_INGESTION_URL = os.environ.get("DATA_INGESTION_SERVICE_URL", "http://127.0.0.1:8002")
 PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL","http://127.0.0.1:8001")
-MODEL_PATH = r"services\prediction_service\artifacts\RandomForest.joblib"
 
 def get_metadata():
     URL = PREDICTION_URL+"/churn_predictor/metadata"
@@ -72,6 +71,25 @@ def get_metrics(model: Any, X_data: pd.DataFrame, y_true: pd.Series, threshold: 
           'brier_loss': brier_loss
      }
 
+def get_champ_metrics(X_data: pd.DataFrame, y_true: pd.Series):
+    URL = PREDICTION_URL+"/churn_predictor/predict"
+    input_data = X_data.to_dict(orient="records")
+    payload = {
+        "batch": input_data
+    }
+    response = requests.post(url=URL, json=payload)
+    resp_json = response.json()
+    y_probs = resp_json['Probability']
+    y_preds = resp_json['Prediction']
+    f2 = fbeta_score(y_true, y_preds, beta=2)
+    recall = recall_score(y_true, y_preds)
+    brier_loss = brier_score_loss(y_true, y_probs)
+    return{
+        'f2_score': f2,
+        'recall_score': recall,
+        'brier_loss': brier_loss
+    }
+
 def trigger_monitor():
     MONITOR_URL = os.environ.get("MONITORING_SERVICE_URL","http://127.0.0.1:8004")
     URL = MONITOR_URL+"/churn_predictor/monitor"
@@ -120,14 +138,12 @@ def compute_brier_baseline(candidate_training_data, features):
     }
 
 def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_data: pd.DataFrame):
-    champion_model = joblib.load(MODEL_PATH)
-    champion_threshold = metadata['threshold']
     candidate_threshold = get_optimal_threshold(candidate_model, test_data)
     y_true = test_data['Churn']
     features = metadata['feature_columns']
     continuous_features = [feature for feature in features if train_data[feature].nunique()>2]
     X_data = test_data[features]
-    champion_metrics = get_metrics(champion_model, X_data, y_true, champion_threshold)
+    champion_metrics = get_champ_metrics(X_data,y_true)
     candidate_metrics = get_metrics(candidate_model, X_data, y_true, candidate_threshold)
 
     f2_improvement = (candidate_metrics['f2_score']>champion_metrics['f2_score'])

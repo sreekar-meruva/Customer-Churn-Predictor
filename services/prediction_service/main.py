@@ -7,7 +7,7 @@ import joblib
 import json
 
 class PredictionRequest(BaseModel):
-    Record_id: str
+    Record_id: Optional[str] = None
     AccountWeeks: float
     ContractRenewal: int
     DataPlan: int
@@ -49,7 +49,7 @@ def getPrediction(payload: BatchPredictionRequest):
     probabilities = app.state.model.predict_proba(dataframe)[:,1]
     predictions = (probabilities>=threshold).astype(int)
     return {
-        'Record_id': record_ids.tolist(),
+        'Record_id': record_ids.tolist() if record_ids else None,
         'Probability': probabilities.tolist(),
         'Prediction': predictions.tolist(),
         'Threshold': threshold
