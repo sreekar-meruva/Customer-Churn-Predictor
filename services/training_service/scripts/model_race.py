@@ -1,4 +1,5 @@
 import requests
+import os
 import pandas as pd
 import numpy as np
 import math
@@ -6,16 +7,23 @@ import json
 import joblib
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import fbeta_score, recall_score, brier_score_loss
-from typing import List, Any
+from typing import List, Any, Dict
+from sklearn.model_selection import StratifiedKFold
 
-BASE_URL = "http://127.0.0.1:8000/churn_predictor"
-with open(r"services\prediction_service\artifacts\model_metadata.json") as f:
-        metadata = json.load(f)
-
+DATA_INGESTION_URL = os.environ.get("DATA_INGESTION_SERVICE_URL", "http://127.0.0.1:8002")
+PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL","http://127.0.0.1:8001")
 MODEL_PATH = r"services\prediction_service\artifacts\RandomForest.joblib"
 
+def get_metadata():
+    URL = PREDICTION_URL+"/churn_predictor/metadata"
+    response = requests.get(URL)
+    metadata = response.json()
+    return metadata
+
+metadata = get_metadata()
+
 def data_acquisition(features: List[str]):
-    URL = BASE_URL+"/get_data"
+    URL = DATA_INGESTION_URL+"/churn_predictor/get_data"
     features.extend(['Week','Record_id'])
     feature_payload = {
         'table_name':'FEATURE_SNAPSHOT',
@@ -65,18 +73,60 @@ def get_metrics(model: Any, X_data: pd.DataFrame, y_true: pd.Series, threshold: 
      }
 
 def trigger_monitor():
-    URL = BASE_URL+"/monitor"
+    MONITOR_URL = os.environ.get("MONITORING_SERVICE_URL","http://127.0.0.1:8004")
+    URL = MONITOR_URL+"/churn_predictor/monitor"
     response = requests.post(URL)
     if response.status_code:
         print("Monitor triggered successfully!")
      
+def update_artifacts(model: Any, metadata: Dict[str,Any]):
+    joblib.dump(model, "artifacts/RandomForestClassifier.joblib")
+    with open(r"artifacts/model_metadata.json",'w') as f:
+        json.dump(metadata, f)
+    with open(r"artifacts/RandomForestClassifier.joblib",'rb') as f:
+        response = requests.post(
+            url=f"{PREDICTION_URL}/churn_predictor/update-artifacts",
+            data = {"metadata": json.dumps(metadata)},
+            files = {"model_file": f}
+        )
+    response.raise_for_status()
+    print("Artifacts upload successful!")
+
+def compute_baseline_stats(candidate_train_data, features):
+    baseline_stats = candidate_train_data[features].agg(['mean','std'])
+    mean = baseline_stats.loc['mean']
+    std = baseline_stats.loc['std']
+    return {
+        'mean': mean.to_dict(),
+        'std': std.to_dict()
+    }
+
+def compute_brier_baseline(candidate_training_data, features):
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    fold_briers = []
+
+    for train_idx, val_idx in skf.split(candidate_training_data, candidate_training_data['Churn']):
+        fold_model = RandomForestClassifier(random_state=42)
+        fold_model.fit(candidate_training_data.iloc[train_idx][features],
+                        candidate_training_data.iloc[train_idx]['Churn'])
+
+        probs = fold_model.predict_proba(candidate_training_data.iloc[val_idx][features])[:, 1]
+        fold_brier = brier_score_loss(candidate_training_data.iloc[val_idx]['Churn'], probs)
+        fold_briers.append(fold_brier)
+
+    return {
+        "mean": np.mean(fold_briers),
+        "std": np.std(fold_briers)
+    }
 
 def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_data: pd.DataFrame):
     champion_model = joblib.load(MODEL_PATH)
     champion_threshold = metadata['threshold']
     candidate_threshold = get_optimal_threshold(candidate_model, test_data)
     y_true = test_data['Churn']
-    X_data = test_data[metadata['feature_columns']]
+    features = metadata['feature_columns']
+    continuous_features = [feature for feature in features if train_data[feature].nunique()>2]
+    X_data = test_data[features]
     champion_metrics = get_metrics(champion_model, X_data, y_true, champion_threshold)
     candidate_metrics = get_metrics(candidate_model, X_data, y_true, candidate_threshold)
 
@@ -85,18 +135,17 @@ def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_dat
     brier_check = candidate_metrics['brier_loss']<=(champion_metrics['brier_loss']+1.1)
 
     if f2_improvement and recall_check and brier_check:
-        joblib.dump(candidate_model, MODEL_PATH)
-        train_data.to_csv(r"data\processed\training_pool.csv")
         model = metadata['model']
         model_version = 1 if model=='RandomForestClassifer' else int(model.strip('RandomForestClassifer_v'))
         metadata = {
             'model': "RandomForestClassifer_v"+str(model_version+1),
             'threshold': candidate_threshold,
-            'feature_columns': metadata['feature_columns'],
+            'brier_baseline_stats': compute_brier_baseline(train_data,features),
+            'baseline_stats':compute_baseline_stats(train_data,continuous_features),
+            'feature_columns': features,
             'model_deployment_week': np.max(test_data['Week'])
         }
-        with open(r"services\prediction_service\artifacts\model_metadata.json",'w') as f:
-            json.dump(metadata,f)
+        update_artifacts(model, metadata)
         trigger_monitor()
     elif f2_improvement and not recall_check:
         print("Review models closely")
@@ -109,7 +158,8 @@ def model_train(drift_week:int, range: int):
     last_model_update = metadata['model_deployment_week']
     model_version = metadata['model']
     range = min(range, drift_week-last_model_update)
-    URL = BASE_URL+"/get_severity"
+
+    URL = DATA_INGESTION_URL+"/churn_predictor/get_severity"
     payload = {
          'model_version': model_version,
          'week': drift_week,
@@ -129,6 +179,3 @@ def model_train(drift_week:int, range: int):
     candidate_model = RandomForestClassifier()
     candidate_model.fit(X_train, y_train, sample_weight=weights)
     evaluate_and_select(candidate_model, train_data, test_data)
-
-if __name__=='__main__':
-    data_acquisition()

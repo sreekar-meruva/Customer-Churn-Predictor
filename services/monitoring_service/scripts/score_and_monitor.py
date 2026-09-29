@@ -1,4 +1,5 @@
 import json
+import os
 import joblib
 import pandas as pd
 import numpy as np
@@ -9,9 +10,18 @@ from services.monitoring_service.scripts.validate_drift_detection import get_dri
 from services.monitoring_service.utils.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
 from sklearn.metrics import brier_score_loss
 
-BASE_URL = "http://127.0.0.1:8000/churn_predictor"
+def get_metadata():
+    PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL","http://127.0.0.1:8001")
+    URL = PREDICTION_URL+"/churn_predictor/metadata"
+    response = requests.get(URL)
+    metadata = response.json()
+    return metadata
 
-def  monitor_input_output(model, prod_stream, metadata):
+PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL","http://127.0.0.1:8001")
+DATA_INGESTION_URL = os.environ.get("DATA_INGESTION_SERVICE_URL","http://127.0.0.1:8002")
+metadata = get_metadata()
+
+def  monitor_input_output(prod_stream, metadata):
     features = metadata['feature_columns']
     brier_baseline_stats = metadata['brier_baseline_stats']
     week = prod_stream['Week'].max()
@@ -21,7 +31,7 @@ def  monitor_input_output(model, prod_stream, metadata):
     get_drift = get_drift_scores(baseline_stats, prod_stream[(prod_stream['Week']==week)], continuous_features)
 
     batch = prod_stream.loc[(prod_stream['Week']==week)]
-    pred_df = get_predictions(batch, metadata)
+    pred_df = get_predictions(batch)
 
     write_prediction_log(pred_df,week)
 
@@ -57,7 +67,8 @@ def  monitor_input_output(model, prod_stream, metadata):
     return report
 
 def trigger_model_retrain(drift_week: int, severity_range: Optional[int]=18):
-    URL = BASE_URL+'/retrain_model'
+    TRAINING_URL = os.environ.get("TRAINING_SERVICE_URL","http://127.0.0.1:8003")
+    URL = TRAINING_URL+'/churn_predictor/retrain_model'
     payload = {
         'drift_week': drift_week,
         'range': severity_range
@@ -67,7 +78,8 @@ def trigger_model_retrain(drift_week: int, severity_range: Optional[int]=18):
     print(detail)
 
 def check_retrain_requirement(model_version, week: Optional[int]=None, range: Optional[int]=6):
-    URL = BASE_URL+"/get_severity"
+    DATA_INGESTION_URL = os.environ.get("DATA_INGESTION_SERVICE_URL","http://127.0.0.1:8002")
+    URL = DATA_INGESTION_URL+"/churn_predictor/get_severity"
     payload = {
         'model_version': model_version,
         'week': week,
@@ -80,30 +92,8 @@ def check_retrain_requirement(model_version, week: Optional[int]=None, range: Op
         return False
     return all('CRITICAL' in record['Severity'] for record in response)
 
-def compute_baseline_stats(train_pool, features):
-    baseline_stats = train_pool[features].agg(['mean','std'])
-    mean = baseline_stats.loc['mean']
-    std = baseline_stats.loc['std']
-    return {
-        'mean': mean.to_dict(),
-        'std': std.to_dict()
-    }
-
-def compute_baseline_brier(model, prod_stream,features):
-    brier_scores=[]
-    for week, batch in prod_stream[(prod_stream['Week']<15)].groupby('Week'):
-        probs = model.predict_proba(batch[features])[:,1]
-        brier_scores.append(
-            brier_score_loss(batch['Churn'], probs)
-        )
-
-    return {
-        'mean': np.mean(brier_scores),
-        'std': np.std(brier_scores)
-    }
-
-def get_predictions(batch: pd.DataFrame, metadata: json):
-    URL = BASE_URL+"/predict"
+def get_predictions(batch: pd.DataFrame):
+    URL = PREDICTION_URL+"/churn_predictor/predict"
     features = ['Record_id']+metadata['feature_columns']
     batch = batch[features]
     batch_dict = batch.to_dict(orient="records")
@@ -114,27 +104,33 @@ def get_predictions(batch: pd.DataFrame, metadata: json):
     response_df = pd.DataFrame(response.json())
     return(response_df)
 
+def get_data():
+    URL = DATA_INGESTION_URL+"/churn_predictor/get_data"
+    features = metadata['feature_columns'].extend(["Record_id", "Week"])
+    feature_payload = {
+        'table_name': "FEATURE_SNAPSHOT",
+        'columns': features
+    }
+    response = requests.post(url = URL, json=feature_payload)
+    records = response.json()['records']
+    features_df = pd.DataFrame(data=records, columns = features)
+    actuals_columns = ['Churn', 'Record_id', 'Week']
+    actuals_payload = {
+        'table_name': "ACTUALS",
+        'columns': actuals_columns
+    }
+    response = requests.post(url=URL, json=actuals_payload)
+    records = response.json()['records']
+    actuals_df = pd.DataFrame(data=records,columns=actuals_columns)
+
+    df = pd.merge(left=features_df, right=actuals_df, on=["Record_id","Week"])
+    return(df)
 
 def start_monitor():
-    model = joblib.load(r"services\prediction_service\artifacts\RandomForest.joblib")
-    train_pool = pd.read_csv(r"data\processed\training_pool.csv")
-    with open(r"services\prediction_service\artifacts\model_metadata.json") as f:
-        metadata=json.load(f)
-
-    prod_stream = pd.read_csv(r"data\processed\Production_prepared_stream.csv")
-
-    if "baseline_stats" not in metadata.keys():
-        continuous_features = [feature for feature in metadata['feature_columns'] if prod_stream[feature].nunique()>2]
-        metadata["baseline_stats"] = compute_baseline_stats(train_pool, continuous_features)
-
-    if "brier_baseline_stats" not in metadata.keys():
-        metadata['brier_baseline_stats'] = compute_baseline_brier(model, prod_stream, metadata['feature_columns'])
-
-    report = monitor_input_output(model, prod_stream, metadata)
+    prod_stream = get_data()
+    report = monitor_input_output(prod_stream, metadata)
     with open(r"services\monitoring_service\reports\Weekly report.json",'w') as f:
         json.dump(report, f)
-    with open(r"artifacts\model_metadata.json",'w') as f:
-        json.dump(metadata,f)
 
     write_actuals(prod_stream[(prod_stream['Week']==report['Week'])])
     return report

@@ -1,12 +1,15 @@
+import os
+import requests
 import pandas as pd
 import json
 import joblib
 from services.monitoring_service.utils.write_logs import write_performance_log, write_drift_log, write_actuals, write_prediction_log
-from services.monitoring_service.scripts.validate_drift_detection import get_performance_metrics, get_model_predictions, alert_log, get_drift_scores
+from services.monitoring_service.scripts.score_and_monitor import get_predictions
+from services.monitoring_service.scripts.validate_drift_detection import get_performance_metrics, alert_log, get_drift_scores
 from services.data_ingestion_service.scripts.setup_snowflake import get_snowflake_connection
 import datetime
 
-def backfill_logs(model, metadata):
+def backfill_logs(metadata):
     df = pd.read_csv(r"data\processed\Production_prepared_stream.csv")
     connection = None
     cursor = None
@@ -19,7 +22,6 @@ def backfill_logs(model, metadata):
         df_weeks = df['Week'].unique()
         features = metadata['feature_columns']
         cont_features = [feature for feature in features if df[feature].nunique()>2]
-        threshold = metadata['threshold']
         for week in df_weeks:
             if week in db_weeks:
                 continue
@@ -29,7 +31,7 @@ def backfill_logs(model, metadata):
             drift_scores = get_drift_scores(baseline_stats=metadata['baseline_stats'],prod_stream=df_data, features=cont_features)
             write_drift_log(metadata['baseline_stats'],features=cont_features,drift_scores=drift_scores['drift_scores'],weekly_mean=drift_scores['weekly_means'],week=week)
 
-            pred_df = get_model_predictions(model, threshold, df_data, features)
+            pred_df = get_predictions(df_data)
             write_prediction_log(df=pred_df, week=week, date=df_data['Score_date'])
             initial_count = len(pred_df)
             df_data = df_data.dropna(subset='Churn')
@@ -62,8 +64,9 @@ def backfill_logs(model, metadata):
         if connection: connection.close()
 
 if __name__=="__main__":
-    with open(r"artifacts\model_metadata.json",'r') as f:
-        metadata = json.load(f)
-    model = joblib.load(r"artifacts\RandomForest.joblib")
+    PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL")
+    URL = PREDICTION_URL+"/churn_predictor/metadata"
+    response = requests.get(URL)
+    metadata = response.json()
     
-    backfill_logs(model, metadata)
+    backfill_logs(metadata)
