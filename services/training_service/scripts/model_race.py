@@ -19,7 +19,6 @@ def get_metadata():
     metadata = response.json()
     return metadata
 
-metadata = get_metadata()
 
 def data_acquisition(features: List[str]):
     URL = DATA_INGESTION_URL+"/churn_predictor/get_data"
@@ -43,7 +42,7 @@ def data_acquisition(features: List[str]):
     dataset = pd.merge(left=feature_df, right=actuals_df, on=['Record_id','Week'], how='inner')
     return dataset
 
-def get_optimal_threshold(model: Any, data: pd.DataFrame):
+def get_optimal_threshold(model: Any, data: pd.DataFrame, metadata: Dict[str,Any]):
     thresholds = np.arange(start=0.1, stop=0.9, step=0.05)
     X_data = data[metadata['feature_columns']]
     y_data = data['Churn']
@@ -138,7 +137,7 @@ def compute_brier_baseline(candidate_training_data, features):
     }
 
 def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_data: pd.DataFrame):
-    candidate_threshold = get_optimal_threshold(candidate_model, test_data)
+    candidate_threshold = get_optimal_threshold(candidate_model, test_data,metadata)
     y_true = test_data['Churn']
     features = metadata['feature_columns']
     continuous_features = [feature for feature in features if train_data[feature].nunique()>2]
@@ -169,6 +168,7 @@ def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_dat
         print("Review models")
 
 def model_train(drift_week:int, range: int):
+    metadata = get_metadata()
     features = metadata['feature_columns']
     data = data_acquisition(features)
     last_model_update = metadata['model_deployment_week']
@@ -194,4 +194,4 @@ def model_train(drift_week:int, range: int):
     y_train = train_data['Churn']
     candidate_model = RandomForestClassifier()
     candidate_model.fit(X_train, y_train, sample_weight=weights)
-    evaluate_and_select(candidate_model, train_data, test_data)
+    evaluate_and_select(candidate_model, train_data, test_data,metadata)

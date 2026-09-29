@@ -1,12 +1,10 @@
 import json
 import os
-import joblib
 import pandas as pd
-import numpy as np
 import requests
-from typing import Optional
+from typing import Optional, Dict, Any
 import datetime
-from validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
+from scripts.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
 from utils.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
 
 
@@ -19,7 +17,6 @@ def get_metadata():
 
 PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL","http://127.0.0.1:8001")
 DATA_INGESTION_URL = os.environ.get("DATA_INGESTION_SERVICE_URL","http://127.0.0.1:8002")
-metadata = get_metadata()
 
 def  monitor_input_output(prod_stream, metadata):
     features = metadata['feature_columns']
@@ -92,7 +89,7 @@ def check_retrain_requirement(model_version, week: Optional[int]=None, range: Op
         return False
     return all('CRITICAL' in record['Severity'] for record in response)
 
-def get_predictions(batch: pd.DataFrame):
+def get_predictions(batch: pd.DataFrame,metadata: Dict[str,Any]):
     URL = PREDICTION_URL+"/churn_predictor/predict"
     features = ['Record_id']+metadata['feature_columns']
     batch = batch[features]
@@ -104,7 +101,7 @@ def get_predictions(batch: pd.DataFrame):
     response_df = pd.DataFrame(response.json())
     return(response_df)
 
-def get_data():
+def get_data(metadata):
     URL = DATA_INGESTION_URL+"/churn_predictor/get_data"
     features = metadata['feature_columns'].extend(["Record_id", "Week"])
     feature_payload = {
@@ -127,7 +124,8 @@ def get_data():
     return(df)
 
 def start_monitor():
-    prod_stream = get_data()
+    metadata = get_metadata()
+    prod_stream = get_data(metadata)
     report = monitor_input_output(prod_stream, metadata)
     with open(r"services\monitoring_service\reports\Weekly report.json",'w') as f:
         json.dump(report, f)
