@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List, Dict, Optional
-from training_service.scripts.model_race import model_train
+from typing import Optional
+from scripts.model_race import model_train
 
 app = FastAPI()
 

@@ -1,4 +1,4 @@
-from services.data_ingestion_service.utils.snowflake_utils import get_snowflake_connection
+from utils.snowflake_utils import get_snowflake_connection
 
 def get_weeks_severity(model_version, week, range):
     conn = get_snowflake_connection()

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, status, Query
-from services.data_ingestion_service.utils.snowflake_writer import insert_dataframe
-from services.data_ingestion_service.utils.snowflake_reader import get_weeks_severity, get_max_db_week, get_data
+from utils.snowflake_writer import insert_dataframe
+from utils.snowflake_reader import get_weeks_severity, get_max_db_week, get_data
 from typing import List, Dict, Any, Optional
 import pandas as pd
 from pydantic import BaseModel

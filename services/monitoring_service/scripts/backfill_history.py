@@ -3,9 +3,9 @@ import requests
 import pandas as pd
 import json
 import joblib
-from services.monitoring_service.utils.write_logs import write_performance_log, write_drift_log, write_actuals, write_prediction_log
-from services.monitoring_service.scripts.score_and_monitor import get_predictions,get_data
-from services.monitoring_service.scripts.validate_drift_detection import get_performance_metrics, alert_log, get_drift_scores
+from utils.write_logs import write_performance_log, write_drift_log, write_actuals, write_prediction_log
+from scripts.score_and_monitor import get_predictions,get_data
+from scripts.validate_drift_detection import get_performance_metrics, alert_log, get_drift_scores
 import datetime
 
 

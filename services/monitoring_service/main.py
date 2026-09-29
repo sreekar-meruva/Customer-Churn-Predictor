@@ -4,7 +4,7 @@ import pandas as pd
 import io
 import json
 from typing import Optional
-from services.monitoring_service.scripts.score_and_monitor import start_monitor
+from scripts.score_and_monitor import start_monitor
 
 app = FastAPI()
 

@@ -6,9 +6,9 @@ import numpy as np
 import requests
 from typing import Optional
 import datetime
-from services.monitoring_service.scripts.validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
-from services.monitoring_service.utils.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
-from sklearn.metrics import brier_score_loss
+from validate_drift_detection import get_drift_scores, get_performance_metrics, alert_log
+from utils.write_logs import write_performance_log, write_prediction_log, write_actuals, write_drift_log
+
 
 def get_metadata():
     PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL","http://127.0.0.1:8001")
