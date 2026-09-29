@@ -28,3 +28,12 @@ services:
       - PREDICTION_SERVICE_URL=http://prediction-service:8000
       - DATA_INGESTION_SERVICE_URL=http://data-ingestion-service:8000
       - TRAINING_SERVICE_URL=http://training-service:8000
+  
+  ui:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./ui:/app
+    command: python -m http.server 3000
+    ports:
+      - "3000:3000"

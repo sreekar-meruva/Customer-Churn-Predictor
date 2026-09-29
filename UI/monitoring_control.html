@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Churn Monitoring Control</title>
+<style>
+  :root {
+    --bg: #12151A;
+    --panel: #1A1E26;
+    --panel-border: #2A2F3A;
+    --text: #E8E6E0;
+    --text-dim: #8B8F99;
+    --accent: #4FB3A9;
+    --accent-dim: #2D6B65;
+    --ok: #6FA85B;
+    --watch: #C99A3E;
+    --alert: #C97640;
+    --critical: #B5493F;
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+  }
+  body {
+    display: flex;
+    justify-content: center;
+    padding: 48px 20px calc(48px + env(safe-area-inset-bottom, 0px));
+    padding-top: calc(48px + env(safe-area-inset-top, 0px));
+    box-sizing: border-box;
+  }
+  main {
+    width: 100%;
+    max-width: 560px;
+  }
+  .eyebrow {
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+    margin: 0 0 6px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--text-dim);
+    font-size: 14.5px;
+    line-height: 1.5;
+    margin: 0 0 32px;
+    max-width: 70ch;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  label.field-label {
+    display: block;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+  input[type="text"]:focus {
+    outline: 2px solid var(--accent-dim);
+    outline-offset: 1px;
+  }
+  .dropzone {
+    border: 1.5px dashed var(--panel-border);
+    border-radius: 10px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone:hover, .dropzone.drag {
+    border-color: var(--accent);
+    background: rgba(79, 179, 169, 0.06);
+  }
+  .dropzone:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .dropzone p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+  .dropzone .filename {
+    color: var(--text);
+    font-weight: 500;
+    margin-top: 6px;
+  }
+  input[type="file"] { display: none; }
+
+  button.run {
+    width: 100%;
+    margin-top: 20px;
+    padding: 13px;
+    background: var(--accent);
+    color: #0B1210;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+  }
+  button.run:hover:not(:disabled) { background: #5FC2B8; }
+  button.run:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    color: var(--text-dim);
+    margin-top: 14px;
+    min-height: 18px;
+  }
+  .spinner {
+    width: 13px; height: 13px;
+    border: 2px solid var(--panel-border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  .spinner.show { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #result { display: none; }
+  .severity-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 100px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .badge.ok { background: rgba(111,168,91,0.15); color: var(--ok); }
+  .badge.watch { background: rgba(201,154,62,0.15); color: var(--watch); }
+  .badge.alert { background: rgba(201,118,64,0.15); color: var(--alert); }
+  .badge.critical { background: rgba(181,73,63,0.15); color: var(--critical); }
+  .week-tag { font-size: 13px; color: var(--text-dim); }
+
+  .metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 20px;
+  }
+  .metric {
+    border-top: 1px solid var(--panel-border);
+    padding-top: 10px;
+  }
+  .metric .label { font-size: 12px; color: var(--text-dim); margin-bottom: 3px; }
+  .metric .value { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .error-box {
+    display: none;
+    background: rgba(181,73,63,0.1);
+    border: 1px solid rgba(181,73,63,0.3);
+    border-radius: 10px;
+    padding: 16px;
+    font-size: 13.5px;
+    color: var(--critical);
+    line-height: 1.5;
+  }
+  .cors-note {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-top: 28px;
+  }
+  .cors-note code {
+    background: var(--panel);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11.5px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+  }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">Churn pipeline</p>
+  <h1>Monitoring control</h1>
+  <p class="sub">Upload this week's batch. Triggering a run scores every record, checks for drift, and reports back the severity for this period.</p>
+
+  <div class="panel">
+    <label class="field-label hidden" for="apiBase">Monitoring service URL</label>
+    <input type="text" id="apiBase" class="hidden" value="http://localhost:8004" spellcheck="false">
+
+    <label class="field-label" for="fileInput">Batch file</label>
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose a CSV file">
+      <p id="dropText">Drop a CSV here, or click to browse</p>
+      <div class="filename" id="filename"></div>
+    </div>
+    <input type="file" id="fileInput" accept=".csv">
+
+    <button class="run" id="runBtn" disabled>Run monitoring</button>
+    <div class="status-line">
+      <span class="spinner" id="spinner"></span>
+      <span id="statusText"></span>
+    </div>
+  </div>
+
+  <div class="panel" id="result">
+    <div class="severity-row">
+      <span class="badge" id="severityBadge"></span>
+      <span class="week-tag" id="weekTag"></span>
+    </div>
+    <div class="metric-grid" id="metricGrid"></div>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <p class="cors-note hidden">
+    If the request fails with a network error, add CORS support to monitoring-service's <code>main.py</code>:<br>
+    <code>from fastapi.middleware.cors import CORSMiddleware</code><br>
+    <code>app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])</code>
+  </p>
+</main>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const filenameEl = document.getElementById('filename');
+  const dropText = document.getElementById('dropText');
+  const runBtn = document.getElementById('runBtn');
+  const spinner = document.getElementById('spinner');
+  const statusText = document.getElementById('statusText');
+  const result = document.getElementById('result');
+  const errorBox = document.getElementById('errorBox');
+  const severityBadge = document.getElementById('severityBadge');
+  const weekTag = document.getElementById('weekTag');
+  const metricGrid = document.getElementById('metricGrid');
+  const apiBase = document.getElementById('apiBase');
+
+  let selectedFile = null;
+
+  function setFile(file) {
+    if (!file) return;
+    selectedFile = file;
+    filenameEl.textContent = file.name;
+    dropText.textContent = 'Selected file:';
+    runBtn.disabled = false;
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener('change', (e) => setFile(e.target.files[0]));
+
+  ['dragover', 'dragenter'].forEach(evt =>
+    dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('drag'); })
+  );
+  ['dragleave', 'drop'].forEach(evt =>
+    dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); })
+  );
+  dropzone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) setFile(file);
+  });
+
+  function severityClass(sev) {
+    if (!sev) return 'ok';
+    const s = sev.toUpperCase();
+    if (s.includes('CRITICAL')) return 'critical';
+    if (s.includes('ALERT')) return 'alert';
+    if (s.includes('WATCH')) return 'watch';
+    return 'ok';
+  }
+
+  function renderMetric(label, value) {
+    const div = document.createElement('div');
+    div.className = 'metric';
+    div.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+    return div;
+  }
+
+  async function runMonitoring() {
+    if (!selectedFile) return;
+    result.style.display = 'none';
+    errorBox.style.display = 'none';
+    runBtn.disabled = true;
+    spinner.classList.add('show');
+    statusText.textContent = 'Scoring batch and checking drift\u2026';
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const base = apiBase.value.replace(/\/$/, '');
+      const response = await fetch(`${base}/churn_predictor/run`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Server responded ${response.status}: ${text}`);
+      }
+
+      const data = await response.json();
+      const severity = data.Severity || data.severity || 'OK';
+      const week = data.Week ?? data.week;
+      const perf = data.Performance || data.performance || {};
+
+      severityBadge.textContent = severity;
+      severityBadge.className = `badge ${severityClass(severity)}`;
+      weekTag.textContent = week !== undefined ? `Week ${week}` : '';
+
+      metricGrid.innerHTML = '';
+      const coverage = data.Week_performance_coverage ?? data.coverage;
+      if (coverage !== undefined) {
+        metricGrid.appendChild(renderMetric('Coverage', `${Number(coverage).toFixed(1)}%`));
+      }
+      if (perf['F2 Score'] !== undefined) {
+        metricGrid.appendChild(renderMetric('F2 score', Number(perf['F2 Score']).toFixed(3)));
+      }
+      if (perf['Precision'] !== undefined) {
+        metricGrid.appendChild(renderMetric('Precision', Number(perf['Precision']).toFixed(3)));
+      }
+      if (perf['Recall'] !== undefined) {
+        metricGrid.appendChild(renderMetric('Recall', Number(perf['Recall']).toFixed(3)));
+      }
+      if (perf['Brier loss score'] !== undefined) {
+        metricGrid.appendChild(renderMetric('Brier loss', Number(perf['Brier loss score']).toFixed(4)));
+      }
+      if (metricGrid.children.length === 0) {
+        metricGrid.appendChild(renderMetric('Ground truth', 'not yet resolved for this batch'));
+      }
+
+      result.style.display = 'block';
+      statusText.textContent = 'Done.';
+    } catch (err) {
+      errorBox.textContent = `Run failed. ${err.message}`;
+      errorBox.style.display = 'block';
+      statusText.textContent = '';
+    } finally {
+      spinner.classList.remove('show');
+      runBtn.disabled = false;
+    }
+  }
+
+  runBtn.addEventListener('click', runMonitoring);
+</script>
+</body>
+</html>
