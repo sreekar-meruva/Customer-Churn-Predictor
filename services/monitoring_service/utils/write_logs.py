@@ -1,9 +1,10 @@
+import os
 import pandas as pd
 import datetime
 import uuid
 import requests
 
-BASE_URL = 'http://127.0.0.1:8000'
+BASE_URL = os.environ.get('DATA_INGESTION_SERVICE_URL','http://127.0.0.1:8002')
 
 def upload_to_snowflake(dataframe, table):
     URL = BASE_URL+"/churn_predictor/upload_data"

@@ -1,3 +1,5 @@
+import os
+import requests
 from fastapi import FastAPI, UploadFile, File, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -5,6 +7,7 @@ import io
 import json
 from typing import Optional
 from scripts.score_and_monitor import start_monitor
+from utils.write_logs import write_actuals
 
 app = FastAPI()
 
@@ -15,6 +18,8 @@ app.add_middleware(
     allow_origins=['*'],
     allow_headers=['*']
 )
+
+INGESTION_URL = os.environ.get('DATA_INGESTION_SERVICE_URL','http://127.0.0.1:8002')
 
 @app.post("/churn_predictor/monitor")
 async def trigger_monitoring_service(file: Optional[UploadFile] = None):
@@ -27,10 +32,29 @@ async def trigger_monitoring_service(file: Optional[UploadFile] = None):
         cols = contents[0].split(",")
         values = [content.split(",") for content in contents[1:]]
         new_df = pd.DataFrame(data=values, columns=cols)
-        old_df = pd.read_csv(r"data\processed\Production_prepared_stream.csv")
-        if old_df.columns != new_df.columns:
-            raise HTTPException(status_code = status.HTTP_422_UNPROCESSABLE_ENTITY, details="Columns in the data file mismatch")
-        df = pd.concat([old_df, new_df], columns = old_df.columns)
-        json.dump(df, r"data\processed\Production_prepared_stream.csv")
+        URL = INGESTION_URL+"/churn_predictor/get_data"
+        payload = {
+            'table_name': 'FEATURE_SNAPSHOT',
+            'limit':1
+        }
+        old_df = requests.post(url = URL, json=payload)
+        columns = [column for column in old_df.columns]
+        columns.append('churn')
+        if len(columns)!=len(new_df.columns):
+            raise HTTPException(status_code = status.HTTP_422_UNPROCESSABLE_ENTITY, details="Column length mismatch")
+        for column in new_df.columns:
+            if column.lower() not in columns:
+                raise HTTPException(status_code = status.HTTP_422_UNPROCESSABLE_ENTITY, details="Columns in the data file mismatch")
+        actuals_df = new_df[(new_df['Churn']!=None)]
+        actuals_df = actuals_df[['Record_id','Churn','Score_date','Week']]
+        write_actuals(actuals_df)
+        feature_df = new_df.drop(['Churn'])
+        feature_dict = feature_df.to_dict(orient='records')
+        URL = INGESTION_URL+"/churn_predictor/upload_data"
+        payload = {
+            'data': feature_dict,
+            'table': 'FEATURE_SNAPSHOT'
+        }
+        requests.post(url = URL, json=payload)
     start_monitor()
     
