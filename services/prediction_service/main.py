@@ -5,6 +5,9 @@ import pandas as pd
 from contextlib import asynccontextmanager
 import joblib
 import json
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 class PredictionRequest(BaseModel):
     Record_id: Optional[str] = None
@@ -25,8 +28,8 @@ class BatchPredictionRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.model = joblib.load(r"artifacts/RandomForest.joblib")
-    with open(r"artifacts/model_metadata.json") as f:
+    app.state.model = joblib.load(BASE_DIR/"artifacts"/"RandomForest.joblib")
+    with open(BASE_DIR/"artifacts"/"model_metadata.json") as f:
         app.state.metadata = json.load(f)
     yield
 
@@ -65,9 +68,9 @@ async def update_artifacts(request: Request,model_file: UploadFile, metadata: st
         contents = await model_file.read()
         with open(r"artifacts/RandomForest.joblib","wb") as f:
             f.write(contents)
-        request.app.state.model = joblib.load(r"artifacts/RandomForest.joblib")
+        request.app.state.model = joblib.load(BASE_DIR/"artifacts"/"RandomForest.joblib")
         request.app.state.metadata = json.loads(metadata)
-        with open(r"artifacts/model_metadata.json",'w') as f:
+        with open(BASE_DIR/"artifacts"/"model_metadata.json",'w') as f:
             json.dump(request.app.metadata, f)
         return {
             "status": "Reload complete",
@@ -81,7 +84,7 @@ def update_metadata(request: Request, metadata: str = Form(...)):
     try:
         new_fields = json.loads(metadata)
         request.app.state.metadata = {**request.app.state.metadata,**new_fields}
-        with open(r"artifacts/model_metadata.json","w") as f:
+        with open(BASE_DIR/"artifacts"/"model_metadata.json","w") as f:
             json.dumps(request.app.state.metadata,f)
     except Exception as ex:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unable to update metadata due to {ex}")
