@@ -3,6 +3,8 @@ services:
     build: ./services/prediction_service
     ports:
       - "8001:8000"
+    volumes:
+      - ./services/prediction_service/artifacts:/app/artifacts
   
   data-ingestion-service:
     build: ./services/data_ingestion_service
@@ -15,10 +17,15 @@ services:
     build: ./services/training_service
     ports:
       - "8003:8000"
+    volumes:
+      - ./services/training_service/artifacts:/app/artifacts
+    env_file:
+      - .env
     environment:
       - PREDICTION_SERVICE_URL=http://prediction-service:8000
       - DATA_INGESTION_SERVICE_URL=http://data-ingestion-service:8000
       - MONITORING_SERVICE_URL=http://monitoring-service:8000
+      - PUBLIC_BASE_URL=http://localhost:8003 
     
   monitoring-service:
     build: ./services/monitoring_service

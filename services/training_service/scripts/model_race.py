@@ -1,5 +1,6 @@
 import requests
 import re
+import uuid
 from fastapi import HTTPException,status
 from pathlib import Path
 import os
@@ -27,7 +28,7 @@ def get_metadata():
 
 def data_acquisition(features: List[str]):
     URL = DATA_INGESTION_URL+"/churn_predictor/get_data"
-    features.extend(['Week','Record_id'])
+    columns = features+['Week','Record_id']
     feature_payload = {
         'table_name':'FEATURE_SNAPSHOT',
         'columns': features 
@@ -54,7 +55,7 @@ def get_optimal_threshold(model: Any, data: pd.DataFrame, metadata: Dict[str,Any
     optimal_threshold = 0
     max_f2 = 0
     for threshold in thresholds:
-        probs = model.predict_proba(X_data)
+        probs = model.predict_proba(X_data)[:,1]
         predictions = (probs>=threshold).astype(int)
         f2_score = fbeta_score(y_data, predictions, beta=2)
         if(max_f2<f2_score):
@@ -64,7 +65,7 @@ def get_optimal_threshold(model: Any, data: pd.DataFrame, metadata: Dict[str,Any
 
 
 def get_metrics(model: Any, X_data: pd.DataFrame, y_true: pd.Series, threshold: float):
-     probs = model.predict_proba(X_data)
+     probs = model.predict_proba(X_data)[:,1]
      predicts = (probs>=threshold).astype(int)
      f2 = fbeta_score(y_true, predicts, beta=2)
      recall = recall_score(y_true, predicts)
@@ -98,14 +99,15 @@ def trigger_monitor():
     MONITOR_URL = os.environ.get("MONITORING_SERVICE_URL","http://127.0.0.1:8004")
     URL = MONITOR_URL+"/churn_predictor/monitor"
     response = requests.post(URL)
-    if response.status_code:
-        print("Monitor triggered successfully!")
+    response.raise_for_status()
+    print("Monitor triggered successfully!")
      
-def update_artifacts(model: Any, metadata: Dict[str,Any]):
-    joblib.dump(model, "artifacts/RandomForestClassifier.joblib")
-    with open(r"artifacts/model_metadata.json",'w') as f:
-        json.dump(metadata, f)
-    with open(r"artifacts/RandomForestClassifier.joblib",'rb') as f:
+def update_artifacts(token_id: str):
+    with open(BASE_DIR/"artifacts"/"metadata.json") as f:
+        metadata = json.load(f)
+    if token_id != metadata['active_token']:
+        raise ValueError("Invalid update token")
+    with open(BASE_DIR/"artifacts"/"RandomForest.joblib",'rb') as f:
         response = requests.post(
             url=f"{PREDICTION_URL}/churn_predictor/update-artifacts",
             data = {"metadata": json.dumps(metadata)},
@@ -132,7 +134,7 @@ def compute_brier_baseline(candidate_training_data, features):
         fold_model.fit(candidate_training_data.iloc[train_idx][features],
                         candidate_training_data.iloc[train_idx]['Churn'])
 
-        probs = fold_model.predict_proba(candidate_training_data.iloc[val_idx][features])[:, 1]
+        probs = fold_model.predict_proba(candidate_training_data.iloc[val_idx][features])[:,1]
         fold_brier = brier_score_loss(candidate_training_data.iloc[val_idx]['Churn'], probs)
         fold_briers.append(fold_brier)
 
@@ -141,18 +143,18 @@ def compute_brier_baseline(candidate_training_data, features):
         "std": np.std(fold_briers)
     }
 
-def trigger_emails(emails: List[str]):
+def trigger_emails(emails: List[str], token_id: str):
     EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
     valid_emails = []
     for email in emails:
         if EMAIL_RE.fullmatch(email.strip()):
-            valid_emails.append(email)
+            valid_emails.append(email.strip())
     try:
-        return send_email(valid_emails)
+        return send_email(valid_emails, token_id)
     except Exception as ex:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"Unable to send email due to {ex}")
 
-def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_data: pd.DataFrame):
+def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_data: pd.DataFrame, metadata):
     candidate_threshold = get_optimal_threshold(candidate_model, test_data,metadata)
     y_true = test_data['Churn']
     features = metadata['feature_columns']
@@ -163,28 +165,32 @@ def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_dat
 
     f2_improvement = (candidate_metrics['f2_score']>champion_metrics['f2_score'])
     recall_check = candidate_metrics['recall_score']>=(champion_metrics['recall_score']-0.02)
-    brier_check = candidate_metrics['brier_loss']<=(champion_metrics['brier_loss']+1.1)
+    brier_check = candidate_metrics['brier_loss']<=(champion_metrics['brier_loss']*1.1)
 
     if f2_improvement and recall_check and brier_check:
         model = metadata['model']
         model_version = 1 if model=='RandomForestClassifer' else int(model.strip('RandomForestClassifer_v'))
+        active_token = str(uuid.uuid4())
         metadata = {
             'model': "RandomForestClassifer_v"+str(model_version+1),
             'threshold': candidate_threshold,
             'brier_baseline_stats': compute_brier_baseline(train_data,features),
             'baseline_stats':compute_baseline_stats(train_data,continuous_features),
             'feature_columns': features,
-            'model_deployment_week': np.max(test_data['Week'])
+            'model_deployment_week': int(np.max(test_data['Week'])),
+            'active_token': active_token
         }
+        with open(BASE_DIR/"artifacts"/"metadata.json",'w') as f:
+            json.dump(metadata,f)
+        joblib.dump(candidate_model, BASE_DIR/"artifacts"/"RandomForest.joblib")
         try:
             with open(BASE_DIR/"artifacts"/"users.json") as f:
                 users = json.load(f)
             emails = users.get("user_emails")
-            trigger_emails(emails)
+            trigger_emails(emails,active_token)
         except requests.RequestException as ex:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Error triggering emails to senders.")
-        update_artifacts(model, metadata)
-        trigger_monitor()
+
     elif f2_improvement and not recall_check:
         print("Review models closely")
     else:
@@ -206,12 +212,12 @@ def model_train(drift_week:int, range: int):
     }
     response = requests.get(URL,params = payload)
     records = response.json()
-    critical_weeks = [record['Week'] for record in records if record['Severity']=='[CRITICAL]']
+    critical_weeks = [record['Week'] for record in records if '[CRITICAL]' in record['Severity']]
     drift_start = drift_week-len(critical_weeks)
     margin_week = drift_start+math.ceil(0.75*len(critical_weeks))
     is_train = data['Week']<margin_week
-    train_data = data.loc[np.where(is_train)]
-    test_data = data.loc[np.where(~is_train)]
+    train_data = data.loc[is_train]
+    test_data = data.loc[~is_train]
     weights = np.where(np.isin(train_data['Week'],critical_weeks),3,1)
     X_train = train_data[features]
     y_train = train_data['Churn']
