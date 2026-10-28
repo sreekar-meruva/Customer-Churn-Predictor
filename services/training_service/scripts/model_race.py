@@ -1,4 +1,7 @@
 import requests
+import re
+from fastapi import HTTPException,status
+from pathlib import Path
 import os
 import pandas as pd
 import numpy as np
@@ -9,9 +12,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import fbeta_score, recall_score, brier_score_loss
 from typing import List, Any, Dict
 from sklearn.model_selection import StratifiedKFold
+from scripts.email_trigger import  send_email
 
 DATA_INGESTION_URL = os.environ.get("DATA_INGESTION_SERVICE_URL", "http://127.0.0.1:8002")
 PREDICTION_URL = os.environ.get("PREDICTION_SERVICE_URL","http://127.0.0.1:8001")
+BASE_DIR = Path(__file__).resolve().parent
 
 def get_metadata():
     URL = PREDICTION_URL+"/churn_predictor/metadata"
@@ -136,6 +141,17 @@ def compute_brier_baseline(candidate_training_data, features):
         "std": np.std(fold_briers)
     }
 
+def trigger_emails(emails: List[str]):
+    EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
+    valid_emails = []
+    for email in emails:
+        if EMAIL_RE.fullmatch(email.strip()):
+            valid_emails.append(email)
+    try:
+        return send_email(valid_emails)
+    except Exception as ex:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"Unable to send email due to {ex}")
+
 def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_data: pd.DataFrame):
     candidate_threshold = get_optimal_threshold(candidate_model, test_data,metadata)
     y_true = test_data['Churn']
@@ -160,6 +176,13 @@ def evaluate_and_select(candidate_model: Any, train_data: pd.DataFrame, test_dat
             'feature_columns': features,
             'model_deployment_week': np.max(test_data['Week'])
         }
+        try:
+            with open(BASE_DIR/"artifacts"/"users.json") as f:
+                users = json.load(f)
+            emails = users.get("user_emails")
+            trigger_emails(emails)
+        except requests.RequestException as ex:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Error triggering emails to senders.")
         update_artifacts(model, metadata)
         trigger_monitor()
     elif f2_improvement and not recall_check:
